@@ -276,6 +276,10 @@
     const first = map.adjacent(state.player, direction);
     if (first === -1) return state;
     const occupied = new Set(state.boxes);
+    if (occupied.has(first)) {
+      const pushed = pushThroughPortal(map, state, occupied, first, direction);
+      if (pushed !== state) return pushed;
+    }
     const playerEntrance = playerPortal(map, state, occupied, state.player, direction);
     if (playerEntrance >= 0) {
       const exit = tracePortalExit(map, state.portalCells, playerEntrance, occupied);
@@ -286,88 +290,89 @@
       }
       return { ...state, player, moves: state.moves + 1 };
     }
-    if (map.isWall(first)) return state;
-    if (!occupied.has(first)) return { ...state, player: first, moves: state.moves + 1 };
-
-    return pushThroughPortal(map, state, occupied, first, direction);
+    if (map.isWall(first) || occupied.has(first)) return state;
+    return { ...state, player: first, moves: state.moves + 1 };
   }
 
-  function planPush(map, state, occupied, first, direction) {
+  function pushPlans(map, state, occupied, first, direction) {
     const moved = new Map();
-    let rear = null;
-    let front = null;
-    let wall = null;
+    const rear = [];
+    const front = [];
+    const wall = [];
     for (let box = first; ;) {
       const ahead = map.adjacent(box, direction);
-      if (ahead === -1) return null;
+      if (ahead === -1) return [];
       if (map.isWall(ahead)) {
         const entrance = portalOn(map, state, ahead, opposite(direction));
-        if (entrance >= 0) wall = { entrance, cargo: box, moved };
+        if (entrance >= 0) wall.push({ entrance, cargo: box, moved });
         break;
       }
       if (!occupied.has(ahead)) {
         if (!map.chainPush && moved.size > 1) break;
         moved.set(box, ahead);
-        return { moved };
+        return [{ moved }];
       }
       const beyond = map.adjacent(ahead, direction);
       const forward = portalOn(map, state, box, direction);
       const facing = portalOn(map, state, ahead, opposite(direction));
-      if (facing >= 0 && !rear) rear = { entrance: facing, cargo: box, moved: new Map() };
+      if (facing >= 0) rear.push({ entrance: facing, cargo: box, moved: new Map() });
       if (forward >= 0) {
-        if (!map.chainPush) return rear ?? { entrance: forward, cargo: ahead, moved: new Map() };
-        if (!front) {
-          // Once the front box leaves, the pushed boxes behind it can fill the gap.
-          front = { entrance: forward, cargo: ahead, moved: new Map(moved).set(box, ahead) };
-        }
+        // In a chain push, the boxes behind transmitted cargo fill the gap.
+        const advance = map.chainPush ? new Map(moved).set(box, ahead) : new Map();
+        front.push({ entrance: forward, cargo: ahead, moved: advance });
+        if (!map.chainPush) break;
       }
-      if (!map.chainPush && facing < 0 && !map.isWall(beyond)) return null;
+      if (!map.chainPush && facing < 0 && !map.isWall(beyond)) break;
       if (!map.chainPush && map.isWall(beyond)) {
         const wallEntrance = portalOn(map, state, beyond, opposite(direction));
-        if (wallEntrance < 0 || rear) break;
+        if (wallEntrance < 0) break;
       }
       moved.set(box, ahead);
       box = ahead;
     }
     // Chain pushes reach this fallback only when the leading box hits a wall.
-    return rear ?? front ?? wall;
+    return [...rear, ...front, ...wall];
   }
 
   function pushThroughPortal(map, state, occupied, first, direction, entryRoute = null) {
     const entryCell = first;
-    const visited = new Set(entryRoute);
-    while (true) {
-      const plan = planPush(map, state, occupied, first, direction);
-      if (!plan) return state;
+    const pending = [];
+    const tryFrom = (cell, heading, visited) => {
+      const plans = pushPlans(map, state, occupied, cell, heading);
+      for (let i = plans.length - 1; i >= 0; i--) pending.push({ plan: plans[i], visited });
+    };
+    tryFrom(first, direction, new Set(entryRoute));
+    while (pending.length) {
+      const { plan, visited } = pending.pop();
       const { moved, entrance, cargo } = plan;
       const boxes = state.boxes.filter(box => box !== cargo).map(box => moved.get(box) ?? box);
       const portalCells = state.portalCells.map(cell => moved.get(cell) ?? cell);
       if (cargo !== undefined) {
-        if (state.portalCells[entrance ^ 1] === cargo) return state;
+        if (state.portalCells[entrance ^ 1] === cargo) continue;
         const projected = new Set(boxes);
         const exit = tracePortalExit(map, portalCells, entrance, projected);
         if (!exit || exit.cell === cargo || exit.cell === state.player ||
-            [...exit.pairs].some(pair => visited.has(pair))) return state;
+            [...exit.pairs].some(pair => visited.has(pair))) continue;
         const landing = exit.cell;
         if (boxes.includes(landing)) {
           // Relay the push first. Local boxes stay put for this input.
           const relay = tracePortalExit(map, state.portalCells, entrance, occupied);
-          if (!relay || !occupied.has(relay.cell) || [...relay.pairs].some(pair => visited.has(pair))) return state;
-          first = relay.cell;
-          for (const pair of relay.pairs) visited.add(pair);
-          direction = relay.direction;
+          if (relay && occupied.has(relay.cell) && ![...relay.pairs].some(pair => visited.has(pair))) {
+            tryFrom(relay.cell, relay.direction, new Set([...visited, ...relay.pairs]));
+          }
           continue;
         }
         boxes.push(landing);
         state.portalCells.forEach((cell, i) => { if (cell === cargo) portalCells[i] = landing; });
       }
-      if (boxes.includes(state.player)) return state;
+      if (boxes.includes(state.player)) continue;
       // If the player entered a portal, follow the push into the vacated exit cell.
       const canFollow = entryRoute !== null || !visited.size;
       const player = canFollow && !boxes.includes(entryCell) ? entryCell : state.player;
       if (typeof first === 'number') boxes.sort((a, b) => a - b);
       return { player, boxes, portalCells, moves: state.moves + 1, pushes: state.pushes + 1 };
     }
+    return state;
   }
 
   function reach(map, state) {
@@ -382,8 +387,10 @@
       first = Math.min(first, cell);
       map.next[cell].forEach((neighbor, direction) => {
         if (map.portalSides.length && (neighbor === -1 || boxes.has(neighbor))) {
-          const entrance = playerPortal(map, state, boxes, cell, direction);
-          neighbor = tracePortalExit(map, state.portalCells, entrance, boxes)?.cell ?? -1;
+          if (playerPortal(map, state, boxes, cell, direction) < 0) return;
+          const next = portalStep(map, { ...state, player: cell }, direction);
+          if (next.pushes !== state.pushes) return;
+          neighbor = next.player;
         }
         if (neighbor < 0 || previous[neighbor] >= 0 || boxes.has(neighbor)) return;
         previous[neighbor] = cell;
