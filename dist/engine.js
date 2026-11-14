@@ -246,10 +246,24 @@
     return state.portalCells.findIndex((host, i) => host === cell && map.portalSides[i] === side);
   }
 
-  function portalExit(map, portalCells, entrance) {
-    if (entrance < 0) return -1;
-    const exit = entrance ^ 1;
-    return map.neighbor(portalCells[exit], map.portalSides[exit]);
+  function tracePortalExit(map, portalCells, entrance, occupied) {
+    const pairs = new Set();
+    while (entrance >= 0) {
+      const pair = entrance >> 1;
+      if (pairs.has(pair)) return null;
+      pairs.add(pair);
+      const exit = entrance ^ 1;
+      const direction = map.portalSides[exit];
+      const cell = map.adjacent(portalCells[exit], direction);
+      if (cell === -1) return null;
+      const wall = map.isWall(cell);
+      if (wall || occupied.has(cell)) {
+        entrance = portalOn(map, { portalCells }, cell, opposite(direction));
+        if (entrance >= 0) continue;
+      }
+      return wall ? null : { cell, direction, pairs };
+    }
+    return null;
   }
 
   function playerPortal(map, state, occupied, player, direction) {
@@ -264,10 +278,11 @@
     const occupied = new Set(state.boxes);
     const playerEntrance = playerPortal(map, state, occupied, state.player, direction);
     if (playerEntrance >= 0) {
-      const player = portalExit(map, state.portalCells, playerEntrance);
-      if (player === -1 || player === state.player) return state;
+      const exit = tracePortalExit(map, state.portalCells, playerEntrance, occupied);
+      if (!exit || exit.cell === state.player) return state;
+      const player = exit.cell;
       if (occupied.has(player)) {
-        return pushThroughPortal(map, state, occupied, player, map.portalSides[playerEntrance ^ 1], playerEntrance);
+        return pushThroughPortal(map, state, occupied, player, exit.direction, exit.pairs);
       }
       return { ...state, player, moves: state.moves + 1 };
     }
@@ -318,10 +333,9 @@
     return rear ?? front ?? wall;
   }
 
-  function pushThroughPortal(map, state, occupied, first, direction, entered = -1) {
+  function pushThroughPortal(map, state, occupied, first, direction, entryRoute = null) {
     const entryCell = first;
-    const visited = new Set();
-    if (entered >= 0) visited.add(entered >> 1);
+    const visited = new Set(entryRoute);
     while (true) {
       const plan = planPush(map, state, occupied, first, direction);
       if (!plan) return state;
@@ -329,16 +343,19 @@
       const boxes = state.boxes.filter(box => box !== cargo).map(box => moved.get(box) ?? box);
       const portalCells = state.portalCells.map(cell => moved.get(cell) ?? cell);
       if (cargo !== undefined) {
-        const pair = entrance >> 1;
-        if (visited.has(pair) || state.portalCells[entrance ^ 1] === cargo) return state;
-        const landing = portalExit(map, portalCells, entrance);
-        if (landing === -1 || landing === cargo || landing === state.player) return state;
+        if (state.portalCells[entrance ^ 1] === cargo) return state;
+        const projected = new Set(boxes);
+        const exit = tracePortalExit(map, portalCells, entrance, projected);
+        if (!exit || exit.cell === cargo || exit.cell === state.player ||
+            [...exit.pairs].some(pair => visited.has(pair))) return state;
+        const landing = exit.cell;
         if (boxes.includes(landing)) {
           // Relay the push first. Local boxes stay put for this input.
-          first = portalExit(map, state.portalCells, entrance);
-          if (!occupied.has(first)) return state;
-          visited.add(pair);
-          direction = map.portalSides[entrance ^ 1];
+          const relay = tracePortalExit(map, state.portalCells, entrance, occupied);
+          if (!relay || !occupied.has(relay.cell) || [...relay.pairs].some(pair => visited.has(pair))) return state;
+          first = relay.cell;
+          for (const pair of relay.pairs) visited.add(pair);
+          direction = relay.direction;
           continue;
         }
         boxes.push(landing);
@@ -346,7 +363,7 @@
       }
       if (boxes.includes(state.player)) return state;
       // If the player entered a portal, follow the push into the vacated exit cell.
-      const canFollow = entered >= 0 || !visited.size;
+      const canFollow = entryRoute !== null || !visited.size;
       const player = canFollow && !boxes.includes(entryCell) ? entryCell : state.player;
       if (typeof first === 'number') boxes.sort((a, b) => a - b);
       return { player, boxes, portalCells, moves: state.moves + 1, pushes: state.pushes + 1 };
@@ -366,7 +383,7 @@
       map.next[cell].forEach((neighbor, direction) => {
         if (map.portalSides.length && (neighbor === -1 || boxes.has(neighbor))) {
           const entrance = playerPortal(map, state, boxes, cell, direction);
-          neighbor = portalExit(map, state.portalCells, entrance);
+          neighbor = tracePortalExit(map, state.portalCells, entrance, boxes)?.cell ?? -1;
         }
         if (neighbor < 0 || previous[neighbor] >= 0 || boxes.has(neighbor)) return;
         previous[neighbor] = cell;
