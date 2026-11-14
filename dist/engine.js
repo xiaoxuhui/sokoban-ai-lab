@@ -286,10 +286,11 @@
   function planPush(map, state, occupied, first, direction) {
     const moved = new Map();
     let rear = null;
+    let front = null;
     let wall = null;
     for (let box = first; ;) {
       const ahead = map.adjacent(box, direction);
-      if (ahead === -1) break;
+      if (ahead === -1) return null;
       if (map.isWall(ahead)) {
         const entrance = portalOn(map, state, ahead, opposite(direction));
         if (entrance >= 0) wall = { entrance, cargo: box, moved };
@@ -304,17 +305,21 @@
       const forward = portalOn(map, state, box, direction);
       const facing = portalOn(map, state, ahead, opposite(direction));
       if (facing >= 0 && !rear) rear = { entrance: facing, cargo: box, moved: new Map() };
-      // A box touching the forward face goes through before the portal box can move.
-      if (forward >= 0) return rear ?? { entrance: forward, cargo: ahead, moved: new Map() };
+      if (forward >= 0) {
+        const intake = { entrance: forward, cargo: ahead, moved: new Map() };
+        if (!map.chainPush) return rear ?? intake;
+        front ??= intake;
+      }
       if (!map.chainPush && facing < 0 && !map.isWall(beyond)) return null;
-      if (map.isWall(beyond)) {
+      if (!map.chainPush && map.isWall(beyond)) {
         const wallEntrance = portalOn(map, state, beyond, opposite(direction));
         if (wallEntrance < 0 || rear) break;
       }
       moved.set(box, ahead);
       box = ahead;
     }
-    return rear ?? wall;
+    // Chain pushes reach this fallback only when the leading box hits a wall.
+    return rear ?? front ?? wall;
   }
 
   function pushThroughPortal(map, state, occupied, first, direction, entered = -1) {
