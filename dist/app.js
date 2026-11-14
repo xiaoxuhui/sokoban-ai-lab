@@ -13,7 +13,11 @@ function loadLevels() {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey));
     if (Array.isArray(saved?.levels) && saved.levels.length) {
-      const entries = saved.levels.map(({ name, code }) => ({ name, ...readLevel(code) }));
+      const entries = saved.levels.map(({ name, code, demonstration }) => ({
+        name, ...readLevel(code),
+        demonstration: Array.isArray(demonstration) ? demonstration.filter(direction =>
+          Number.isInteger(direction) && direction >= 0 && direction <= 3) : [],
+      }));
       return { entries, index: entries[saved.index] ? saved.index : 0 };
     }
   } catch { /* Try the previous format. */ }
@@ -33,6 +37,8 @@ let brush = '#';
 let mode = 'edit';
 let manual = map.initial;
 let undo = [];
+let manualPath = [];
+let recording = false;
 let trainer = null;
 let trainingProblem = '';
 let attempt = null;
@@ -158,18 +164,22 @@ function renderMap() {
   $('dpad').hidden = !playing;
   $('undo').disabled = !undo.length;
   $('reset-play').disabled = !manual.moves;
+  $('record-tools').hidden = !recording;
+  $('save-demo').disabled = !manualPath.length;
   $('map-info').textContent = '无限地图 · ' + map.initial.boxes.length + ' 个箱子 · ' + map.goals.size + ' 个目标';
   $('move-count').textContent = '移动 ' + manual.moves + ' 步 · 推箱 ' + manual.pushes + ' 次';
   const problem = editing || watching ? validate(map) || (watching ? trainingProblem : '') : '';
   const solved = !editing && won(map, state);
   $('map-note').className = 'map-note' + (problem ? ' error' : solved ? ' success' : '');
   const note = problem || (editing ? '地图可试玩和训练' :
+    recording ? (solved ? '示范已通关，可以保存。' : '示范中。走几步或推几次箱后即可保存。') :
     playing ? (solved ? '通关！' : '已就位 ' + placed(map, state) + ' / ' + map.goals.size) :
     watching ? watchNote(state, solved) : replayMessage);
   if ($('map-note').textContent !== note) $('map-note').textContent = note;
   if (watching) {
     const episode = Math.min((trainer?.episodes ?? 0) + Number(watchResult === null), target);
     $('watch-progress').textContent = (episode ? '第 ' + number.format(episode) + ' 回合 · ' : '') +
+      (watchSegment?.demonstration ? '跟随示范 · ' : '') +
       '移动 ' + state.moves + ' 步 · 推箱 ' + state.pushes + ' 次';
   }
   renderBoard(state);
@@ -192,6 +202,7 @@ function setMode(next) {
   }
   clearTimeout(playback);
   playback = 0;
+  if (next !== 'play') recording = false;
   mode = next;
   if (mode === 'play') followPlayer(manual);
   if (mode === 'watch') {
@@ -212,7 +223,9 @@ function saveLevels() {
   try {
     localStorage.setItem(storageKey, JSON.stringify({
       index: library.index,
-      levels: library.entries.map(entry => ({ name: entry.name, code: writeWorld(entry.tiles, entry.chainPush) })),
+      levels: library.entries.map(entry => ({
+        name: entry.name, code: writeWorld(entry.tiles, entry.chainPush), demonstration: entry.demonstration,
+      })),
     }));
   } catch { /* Storage is optional. */ }
 }
@@ -235,6 +248,8 @@ function loadBoard(recenter) {
   area = bounds(level.tiles);
   manual = map.initial;
   undo = [];
+  manualPath = [];
+  recording = false;
   mode = 'edit';
   $('chain-push').checked = level.chainPush;
   if (recenter) centerMap();
@@ -279,6 +294,7 @@ function changeMap(tiles, recenter = false, chainPush = level.chainPush) {
   target = 0;
   level.tiles = tiles;
   level.chainPush = chainPush;
+  level.demonstration = [];
   saveLevels();
   loadBoard(recenter);
 }
@@ -391,6 +407,7 @@ function move(direction) {
   const next = step(map, manual, direction);
   if (next === manual) return;
   undo.push(manual);
+  manualPath.push(direction);
   manual = next;
   followPlayer(manual);
   renderMap();
@@ -409,14 +426,68 @@ document.addEventListener('keydown', event => {
 $('undo').addEventListener('click', () => {
   if (!undo.length) return;
   manual = undo.pop();
+  manualPath.pop();
   followPlayer(manual);
   renderMap();
 });
-$('reset-play').addEventListener('click', () => {
+function resetPlay() {
   manual = map.initial;
   undo = [];
+  manualPath = [];
   followPlayer(manual);
   renderMap();
+}
+
+$('reset-play').addEventListener('click', resetPlay);
+
+function getTrainer() {
+  if (trainer) return trainer;
+  const field = trainingMap(map.tiles, area, level.chainPush);
+  if (field) return new Trainer(field);
+  trainingProblem = '摆放范围超过 40,000 格训练区。请缩小关卡范围后再试。';
+  return null;
+}
+
+function updateDemonstration(path) {
+  const model = getTrainer();
+  if (!model || !model.setDemonstration(path)) return false;
+  if (trainer) {
+    attempt = null;
+    watchState = null;
+    watchSegment = null;
+    watchResult = null;
+  }
+  level.demonstration = path.slice();
+  recording = false;
+  saveLevels();
+  renderMap();
+  renderTraining();
+  return true;
+}
+
+$('record-demo').addEventListener('click', () => {
+  pauseTraining();
+  resetPlay();
+  recording = true;
+  setMode('play');
+  const view = board.getBoundingClientRect();
+  if (view.top < 0 || view.top >= window.innerHeight) board.scrollIntoView({ block: 'center' });
+});
+$('cancel-demo').addEventListener('click', () => {
+  recording = false;
+  renderMap();
+  renderTraining();
+});
+$('save-demo').addEventListener('click', () => {
+  if (!recording || !manualPath.length) return;
+  if (!updateDemonstration(manualPath)) {
+    $('map-note').textContent = trainingProblem || '示范走出了 AI 的训练区。请撤销超出地图外围三格的步数。';
+    $('map-note').classList.add('error');
+  }
+});
+$('delete-demo').addEventListener('click', () => {
+  pauseTraining();
+  updateDemonstration([]);
 });
 
 function drawChart() {
@@ -436,7 +507,7 @@ function drawChart() {
   $('chart-empty').hidden = history.length > 0;
   $('chart-start').textContent = number.format(start);
   $('chart-end').textContent = end ? number.format(end) + ' 回合' : '回合';
-  canvas.setAttribute('aria-label', end ? '训练至第 ' + end + ' 回合，近期胜率 ' + Math.round(trainer.rate * 100) + '%' : '训练胜率曲线');
+  canvas.setAttribute('aria-label', history.length ? '训练至第 ' + end + ' 回合，近期独立胜率 ' + Math.round(trainer.rate * 100) + '%' : '独立训练胜率曲线');
   if (!history.length) return;
 
   const points = history.map(point => [
@@ -475,17 +546,23 @@ function renderTraining() {
   if (pill.lastElementChild.textContent !== status) pill.lastElementChild.textContent = status;
   pill.classList.toggle('active', running || Boolean(best));
   $('episodes').textContent = number.format(episodes);
-  $('rate').textContent = episodes ? Math.round(trainer.rate * 100) + '%' : '—';
+  $('rate').textContent = trainer?.recent.length ? Math.round(trainer.rate * 100) + '%' : '—';
   $('best').textContent = best ? number.format(best.pushes) : '—';
-  $('train').disabled = Boolean(problem) || playback !== 0;
+  $('train').disabled = Boolean(problem) || playback !== 0 || recording;
   const action = running ? '暂停训练' : paused ? '继续训练' : episodes ? '再训练一批' : '开始训练';
   $('train').lastElementChild.textContent = action;
   $('watch-run').textContent = action;
   $('watch-run').disabled = $('train').disabled;
   $('train').firstElementChild.textContent = running ? 'Ⅱ' : '▶';
   $('budget').disabled = running || paused;
-  $('clear-training').disabled = !trainer || playback !== 0;
-  $('replay').disabled = !best || running || playback !== 0;
+  $('clear-training').disabled = !trainer || playback !== 0 || recording;
+  $('replay').disabled = !best || running || playback !== 0 || recording;
+  const demoLength = level.demonstration?.length ?? 0;
+  $('demo-summary').textContent = demoLength ? '已保存 ' + demoLength + ' 步 · 每两回合使用一次' : '演示几步，帮 AI 练习下一步。';
+  $('record-demo').textContent = demoLength ? '重录示范' : '示范几步';
+  $('record-demo').disabled = Boolean(problem) || recording || playback !== 0;
+  $('delete-demo').hidden = !demoLength;
+  $('delete-demo').disabled = recording || playback !== 0;
 
   let note = '训练当前关卡，找到通关路线后即可回放。';
   if (problem) note = problem;
@@ -537,7 +614,7 @@ function trainVisible(now, delay) {
     nextWatchAt = now + Math.max(400, delay);
   } else {
     watchState = toWorldState(event.value.from);
-    watchSegment = { directions: event.value.directions, index: 0 };
+    watchSegment = { directions: event.value.directions, index: 0, demonstration: event.value.demonstration };
   }
   return true;
 }
@@ -560,17 +637,16 @@ function trainFrame(now) {
 function toggleTraining() {
   if (running) pauseTraining();
   else {
-    if (validate(map)) return;
+    if (validate(map) || recording) return;
     if (mode === 'replay') setMode('edit');
     if (!trainer) {
-      const field = trainingMap(map.tiles, area, level.chainPush);
-      if (!field) {
-        trainingProblem = '摆放范围超过 40,000 格训练区。请缩小关卡范围后再试。';
+      trainer = getTrainer();
+      if (!trainer) {
         renderMap();
         renderTraining();
         return;
       }
-      trainer = new Trainer(field);
+      trainer.setDemonstration(level.demonstration ?? []);
     }
     if (trainer.episodes >= target) target = trainer.episodes + Number($('budget').value);
     running = true;
@@ -658,8 +734,9 @@ $('help').addEventListener('click', () => {
     '<p>放置一个玩家，并为每个箱子放置一个目标。点击「回到起点」可回到玩家附近。</p>' +
     '<p>点「手动试玩」，用方向键、WASD 或屏幕方向按钮移动。勾选「允许连推多个箱子」后，玩家和 AI 都能一步推动相邻的一整排箱子，计作一次推箱。</p>' +
     '<p>开始训练后，左侧地图会显示 AI 的每一步。可在「观战 AI」中调速度或暂停。切换到编辑或试玩时，AI 会继续加速训练。</p>' +
+    '<p>点「示范几步」，从起点演示走位或推箱，再点「保存示范」。AI 每两回合会跟随示范一次，然后自行继续。胜率只统计独立尝试。</p>' +
     '<p>AI 用 Q-learning 反复练习。训练区包含已绘制的地图和外围三格空地，最多 40,000 格。找到通关路线后即可回放。</p>' +
-    '<p>用关卡列表逐关训练。切换时会暂停当前训练，切回即可继续。地图和规则保存在浏览器，训练进度保留至页面关闭或刷新。修改地图或规则会清空当前关的训练进度。</p>',
+    '<p>用关卡列表逐关训练。切换时会暂停当前训练，切回即可继续。示范、地图和规则保存在浏览器。修改地图或规则会清空当前关的示范和训练进度。</p>',
   [actionButton('知道了', 'primary', () => dialog.close())]);
 });
 

@@ -115,6 +115,10 @@ h3 { font-size: 13px; margin: 0; }
 .plot p { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--muted); font-size: 12px; }
 .x-labels { grid-column: 2; display: flex; justify-content: space-between; margin-top: 7px; }
 .training-options { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0 11px; color: var(--muted); font-size: 12px; }
+.demo-controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 7px; padding: 7px 0 10px; }
+.demo-copy p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+.demo-button { padding: 6px 9px; white-space: nowrap; color: var(--green); font-size: 12px; }
+.record-tools .primary { padding: 7px 10px; }
 .rule-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .rule-toggle input { margin: 0; width: 15px; height: 15px; accent-color: var(--green); cursor: pointer; }
 .level-name { display: grid; gap: 5px; }

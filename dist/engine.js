@@ -244,10 +244,38 @@
       this.best = won(map, map.initial) ? { path: [], pushes: 0 } : null;
       this.last = map.initial;
       this.state = map.initial;
+      this.demonstration = null;
+      this.guidedStart = 0;
+      this.guided = false;
       this.maxPushes = Math.min(160, Math.max(35, map.initial.boxes.length * 28));
     }
 
+    setDemonstration(directions) {
+      const map = this.map;
+      let state = map.initial;
+      const trace = [];
+      for (const direction of directions) {
+        const next = step(map, state, direction);
+        if (next === state || won(map, state)) return false;
+        if (next.pushes > state.pushes) {
+          const { key, actions } = choices(map, state, this.distances);
+          const action = actions.find(candidate => candidate.box === next.player && candidate.direction === direction);
+          if (action) trace.push([key, action, this.reward(state, next, action, false)]);
+        }
+        state = next;
+      }
+      this.demonstration = directions.length ? { directions: directions.slice(), state, trace } : null;
+      this.guidedStart = this.episodes;
+      this.guided = false;
+      this.state = map.initial;
+      return true;
+    }
+
     get epsilon() {
+      if (this.demonstration) {
+        const sinceDemo = this.episodes - this.guidedStart;
+        return Math.max(0.12, 0.75 * Math.exp(-sinceDemo / 280));
+      }
       return Math.max(0.12, 0.96 * Math.exp(-this.episodes / 280));
     }
 
@@ -264,6 +292,21 @@
       return this.q.get(key)?.get(action.id) ?? this.estimate(action);
     }
 
+    learn(key, action, value) {
+      let values = this.q.get(key);
+      if (!values && this.q.size < 100000) {
+        values = new Map();
+        this.q.set(key, values);
+      }
+      values?.set(action.id, value);
+    }
+
+    reward(state, next, action, stuck) {
+      if (won(this.map, next)) return 18;
+      if (stuck) return -5;
+      return -0.13 + 0.8 * (placed(this.map, next) - placed(this.map, state)) + this.estimate(action);
+    }
+
     episode() {
       for (const _ of this.attempt()) { /* Complete the episode synchronously. */ }
     }
@@ -271,10 +314,19 @@
     *attempt() {
       const map = this.map;
       let state = this.state = map.initial;
+      let path = [];
+      let trace = [];
+      this.guided = Boolean(this.demonstration && (this.episodes - this.guidedStart) % 2 === 0);
+      if (this.guided) {
+        const opening = this.demonstration;
+        path = opening.directions.slice();
+        trace = opening.trace.slice();
+        state = this.state = opening.state;
+        yield { from: map.initial, directions: opening.directions, demonstration: true };
+      }
+      const pushLimit = state.pushes + this.maxPushes;
       let current = choices(map, state, this.distances);
-      const path = [];
-      const trace = [];
-      while (current.actions.length && state.pushes < this.maxPushes && !won(map, state)) {
+      while (current.actions.length && state.pushes < pushLimit && !won(map, state)) {
         const actions = current.actions;
         let action = actions[Math.floor(this.random() * actions.length)];
         if (this.random() >= this.epsilon) {
@@ -294,18 +346,12 @@
         const next = choices(map, nextState, this.distances);
         const solved = won(map, nextState);
         const stuck = next.actions.length === 0;
-        const timedOut = nextState.pushes >= this.maxPushes;
-        const reward = solved ? 18 : stuck ? -5 :
-          -0.13 + 0.8 * (placed(map, nextState) - placed(map, state)) + this.estimate(action);
+        const timedOut = nextState.pushes >= pushLimit;
+        const reward = this.reward(state, nextState, action, stuck);
         const future = solved || stuck || timedOut ? 0 : Math.max(...next.actions.map(choice => this.value(next.key, choice)));
         const before = this.value(current.key, action);
         const learned = before + 0.35 * (reward + 0.94 * future - before);
-        let values = this.q.get(current.key);
-        if (!values && this.q.size < 100000) {
-          values = new Map();
-          this.q.set(current.key, values);
-        }
-        values?.set(action.id, learned);
+        this.learn(current.key, action, learned);
         trace.push([current.key, action, reward]);
         state = this.state = nextState;
         current = next;
@@ -321,7 +367,7 @@
           const [key, action, reward] = trace[i];
           value = reward + 0.94 * value;
           const before = this.value(key, action);
-          if (value > before) this.q.get(key)?.set(action.id, before + 0.45 * (value - before));
+          if (value > before) this.learn(key, action, before + 0.45 * (value - before));
         }
         if (!this.best || state.pushes < this.best.pushes ||
             (state.pushes === this.best.pushes && path.length < this.best.path.length)) {
@@ -330,9 +376,11 @@
       }
       this.last = state;
       this.episodes++;
-      this.recent.push(Number(success));
-      if (this.recent.length > 100) this.recent.shift();
-      if (this.episodes === 1 || this.episodes % 10 === 0) {
+      if (!this.guided) {
+        this.recent.push(Number(success));
+        if (this.recent.length > 100) this.recent.shift();
+      }
+      if (this.recent.length && (!this.history.length || this.episodes % 10 === 0)) {
         this.history.push({ episode: this.episodes, rate: this.rate });
         if (this.history.length > 240) this.history.shift();
       }

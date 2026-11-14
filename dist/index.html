@@ -6,9 +6,9 @@
   <meta name="description" content="绘制自定义地图，手动试玩，观察 AI 通过强化学习掌握推箱子。">
   <meta name="theme-color" content="#111715">
   <title>推箱子实验室</title>
-  <link rel="stylesheet" href="style.css?v=4">
-  <script src="engine.js?v=4" defer></script>
-  <script src="app.js?v=4" defer></script>
+  <link rel="stylesheet" href="style.css?v=5">
+  <script src="engine.js?v=5" defer></script>
+  <script src="app.js?v=5" defer></script>
 </head>
 <body>
   <header class="top">
@@ -77,6 +77,10 @@
 
         <div class="map-footer">
           <div class="map-note" id="map-note" role="status"></div>
+          <div class="tools-group record-tools" id="record-tools" hidden>
+            <button class="plain" id="cancel-demo" type="button">取消</button>
+            <button class="primary" id="save-demo" type="button" disabled>保存示范</button>
+          </div>
           <div class="tools-group" id="map-actions">
             <button class="plain" id="levels" type="button">添加示例</button>
             <button class="plain" id="new-map" type="button">新建关卡</button>
@@ -97,12 +101,12 @@
 
         <div class="stats">
           <div><span>训练回合</span><strong id="episodes">0</strong></div>
-          <div><span>近 100 局胜率</span><strong id="rate">—</strong></div>
+          <div><span>近 100 局独立胜率</span><strong id="rate">—</strong></div>
           <div><span>最佳推箱次数</span><strong id="best">—</strong></div>
         </div>
 
         <div class="chart-section">
-          <div class="chart-title"><h3>学习曲线</h3><span><i></i>近期胜率</span></div>
+          <div class="chart-title"><h3>学习曲线</h3><span><i></i>独立胜率</span></div>
           <div class="chart-area">
             <div class="y-labels" aria-hidden="true"><span>100%</span><span>50%</span><span>0%</span></div>
             <div class="plot">
@@ -113,6 +117,13 @@
           </div>
         </div>
 
+        <div class="demo-controls">
+          <div class="demo-copy"><h3>开局示范</h3><p id="demo-summary"></p></div>
+          <div class="tools-group">
+            <button class="outline demo-button" id="record-demo" type="button">示范几步</button>
+            <button class="plain" id="delete-demo" type="button" hidden>移除</button>
+          </div>
+        </div>
         <div class="training-options">
           <label class="rule-toggle"><input id="chain-push" type="checkbox"> 允许连推多个箱子</label>
         </div>
