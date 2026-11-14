@@ -28,7 +28,7 @@
   const opposite = direction => (direction + 2) % 4;
   const portalHost = tile => tile === '#' || tile === '$' || tile === '*';
 
-  function compile(rows, chainPush = false, portals = []) {
+  function compile(rows, chainPush = false, portals = [], finish = null) {
     const width = rows[0].length;
     const tiles = rows.join('');
     const goals = new Set();
@@ -48,7 +48,7 @@
     const isWall = cell => tiles[cell] === '#';
     const next = adjacent.map(neighbors => neighbors.map(cell => isWall(cell) ? -1 : cell));
     return {
-      width, tiles, goals, next, chainPush, isWall,
+      width, tiles, goals, finish, next, chainPush, isWall,
       adjacent: (cell, direction) => adjacent[cell][direction],
       neighbor: (cell, direction) => next[cell][direction],
       portalSides: portals.map(end => end.side),
@@ -106,24 +106,35 @@
       used.add(face);
       return { cell, side };
     }));
-    return { tiles, chainPush: data.chainPush === true, portals };
+    let finish = null;
+    if (data.finish != null) {
+      const location = data.finish;
+      if (!Array.isArray(location) || location.length !== 2 ||
+          location.some(value => !Number.isSafeInteger(value) || Math.abs(value) > 1e12)) {
+        throw new Error('玩家终点须写成 [横坐标, 纵坐标]。');
+      }
+      finish = key(...location);
+      if (tiles.get(finish) === '#') throw new Error('玩家终点须放在可行走的格子上。');
+    }
+    return { tiles, chainPush: data.chainPush === true, portals, finish };
   }
 
   function readWorld(text) {
     return readLevel(text).tiles;
   }
 
-  function writeWorld(tiles, chainPush = false, portals = []) {
+  function writeWorld(tiles, chainPush = false, portals = [], finish = null) {
     const lines = [...tiles].map(([cell, tile]) => JSON.stringify([...point(cell), tile]));
     const pairs = [];
     for (let i = 0; i < portals.length; i += 2) {
       pairs.push(JSON.stringify(portals.slice(i, i + 2).map(end => [...point(end.cell), end.side])));
     }
     const links = pairs.length ? '],\n  "portals": [\n    ' + pairs.join(',\n    ') + '\n  ]' : ']';
-    return '{\n  "version": 1,\n  "chainPush": ' + chainPush + ',\n  "tiles": [' + (lines.length ? '\n    ' + lines.join(',\n    ') + '\n  ' : '') + links + '\n}';
+    const finishField = finish === null ? '' : ',\n  "finish": ' + JSON.stringify(point(finish));
+    return '{\n  "version": 1,\n  "chainPush": ' + chainPush + ',\n  "tiles": [' + (lines.length ? '\n    ' + lines.join(',\n    ') + '\n  ' : '') + links + finishField + '\n}';
   }
 
-  function world(tiles, chainPush = false, portals = []) {
+  function world(tiles, chainPush = false, portals = [], finish = null) {
     const goals = new Set();
     const boxes = [];
     let player = -1;
@@ -139,7 +150,7 @@
     };
     const isWall = cell => tiles.get(cell) === '#';
     return {
-      tiles, goals, chainPush, isWall, adjacent, portalSides: portals.map(end => end.side),
+      tiles, goals, finish, chainPush, isWall, adjacent, portalSides: portals.map(end => end.side),
       initial: { player, boxes, moves: 0, pushes: 0, portalCells: portals.map(end => end.cell) },
       neighbor(cell, direction) {
         const next = adjacent(cell, direction);
@@ -148,11 +159,16 @@
     };
   }
 
-  function bounds(tiles) {
+  function bounds(tiles, finish = null) {
     let left = Infinity;
     let top = Infinity;
     let right = -Infinity;
     let bottom = -Infinity;
+    if (finish !== null) {
+      [left, top] = point(finish);
+      right = left;
+      bottom = top;
+    }
     for (const cell of tiles.keys()) {
       const [x, y] = point(cell);
       left = Math.min(left, x);
@@ -163,7 +179,7 @@
     return { left, top, right, bottom };
   }
 
-  function trainingMap(tiles, area, chainPush = false, portals = []) {
+  function trainingMap(tiles, area, chainPush = false, portals = [], finish = null) {
     const { left, top, right, bottom } = area;
     const margin = 3;
     const width = right - left + 1 + margin * 2;
@@ -179,14 +195,15 @@
       rows[Math.floor(index / width)][index % width] = tile;
     }
     return {
-      ...compile(rows.map(row => row.join('')), chainPush, portals.map(end => ({ ...end, cell: toIndex(end.cell) }))),
+      ...compile(rows.map(row => row.join('')), chainPush,
+        portals.map(end => ({ ...end, cell: toIndex(end.cell) })), finish === null ? null : toIndex(finish)),
       worldCell: cell => key(left - margin + cell % width, top - margin + Math.floor(cell / width)),
     };
   }
 
   function validate(map) {
     if (map.initial.player === -1) return '请放置一个玩家起点。';
-    if (!map.goals.size) return '请至少放置一个目标点。';
+    if (!map.goals.size && map.finish === null) return '请至少放置一个箱子目标或玩家终点。';
     if (map.initial.boxes.length < map.goals.size) return '箱子不足，无法覆盖所有目标点。';
     return '';
   }
@@ -196,7 +213,8 @@
   }
 
   function won(map, state) {
-    return map.goals.size > 0 && placed(map, state) === map.goals.size;
+    if (map.finish !== null && state.player !== map.finish) return false;
+    return (map.goals.size > 0 || map.finish !== null) && placed(map, state) === map.goals.size;
   }
 
   function pushLanding(map, first, direction, occupied) {
@@ -364,6 +382,8 @@
     const area = reach(map, state);
     const actions = [];
     const hasPortals = map.portalSides.length > 0;
+    const finishReachable = map.finish !== null && area.previous[map.finish] >= 0 &&
+      placed(map, state) === map.goals.size;
     // Extra boxes can occupy squares from which no goal is reachable.
     const spare = state.boxes.length - map.goals.size;
     const stranded = state.boxes.filter(box => distances[box] < 0).length;
@@ -388,7 +408,13 @@
     const key = hasPortals ?
       [state.player, state.boxes.join(','), state.portalCells.join(',')].join(':') :
       area.first + ':' + state.boxes.join(',');
-    return { area, actions, key };
+    return { area, actions, key, finishReachable };
+  }
+
+  function walkingPath(area, from, to) {
+    const path = [];
+    for (let cell = to; cell !== from; cell = area.previous[cell]) path.push(area.via[cell]);
+    return path.reverse();
   }
 
   class Trainer {
@@ -463,8 +489,8 @@
       values?.set(action.id, value);
     }
 
-    reward(state, next, action, stuck) {
-      if (won(this.map, next)) return 18;
+    reward(state, next, action, stuck, solved = won(this.map, next)) {
+      if (solved) return 18;
       if (stuck) return -5;
       return -0.13 + 0.8 * (placed(this.map, next) - placed(this.map, state)) + this.estimate(action);
     }
@@ -488,7 +514,7 @@
       }
       const pushLimit = state.pushes + this.maxPushes;
       let current = choices(map, state, this.distances);
-      while (current.actions.length && state.pushes < pushLimit && !won(map, state)) {
+      while (current.actions.length && state.pushes < pushLimit && !current.finishReachable && !won(map, state)) {
         const actions = current.actions;
         let action = actions[Math.floor(this.random() * actions.length)];
         if (this.random() >= this.epsilon) {
@@ -496,20 +522,16 @@
             if (this.value(current.key, candidate) > this.value(current.key, action)) action = candidate;
           }
         }
-        const walking = [];
-        for (let cell = action.from; cell !== state.player; cell = current.area.previous[cell]) {
-          walking.push(current.area.via[cell]);
-        }
-        walking.reverse();
+        const walking = walkingPath(current.area, state.player, action.from);
         const beforePush = state;
         const nextState = step(map, { ...state, player: action.from, moves: state.moves + walking.length }, action.direction);
         walking.push(action.direction);
         path.push(...walking);
         const next = choices(map, nextState, this.distances);
-        const solved = won(map, nextState);
+        const solved = next.finishReachable || won(map, nextState);
         const stuck = next.actions.length === 0;
         const timedOut = nextState.pushes >= pushLimit;
-        const reward = this.reward(state, nextState, action, stuck);
+        const reward = this.reward(state, nextState, action, stuck, solved);
         const future = solved || stuck || timedOut ? 0 : Math.max(...next.actions.map(choice => this.value(next.key, choice)));
         const before = this.value(current.key, action);
         const learned = before + 0.35 * (reward + 0.94 * future - before);
@@ -520,6 +542,13 @@
         yield { from: beforePush, directions: walking };
       }
 
+      if (current.finishReachable && state.player !== map.finish) {
+        const walking = walkingPath(current.area, state.player, map.finish);
+        path.push(...walking);
+        const beforeWalk = state;
+        state = this.state = { ...state, player: map.finish, moves: state.moves + walking.length };
+        yield { from: beforeWalk, directions: walking };
+      }
       const success = won(map, state);
       if (success) {
         this.successes++;

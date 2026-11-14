@@ -31,8 +31,8 @@ function loadLevels() {
 const library = loadLevels();
 const sessions = new Map();
 let level = library.entries[library.index];
-let map = world(level.tiles, level.chainPush, level.portals);
-let area = bounds(map.tiles);
+let map = world(level.tiles, level.chainPush, level.portals, level.finish);
+let area = bounds(map.tiles, map.finish);
 let brush = '#';
 let pendingPortal = null;
 let portalMessage = '';
@@ -138,16 +138,19 @@ function renderBoard(state) {
   board.classList.toggle('linking', linking);
   cells.forEach((cell, coordinate) => {
     const goal = map.goals.has(coordinate);
+    const finish = map.finish === coordinate;
     const tile = map.tiles.get(coordinate) === '#' ? '#' :
       boxes.has(coordinate) ? (goal ? '*' : '$') :
       state.player === coordinate ? (goal ? '+' : '@') : (goal ? '.' : ' ');
     const ends = marks.get(coordinate) ?? [];
     const signature = ends.map(({ side, pair }) => side + ':' + pair).join(',');
-    if (cell.dataset.tile !== tile || cell.dataset.portals !== signature) {
+    if (cell.dataset.tile !== tile || cell.dataset.portals !== signature || cell.classList.contains('finish-cell') !== finish) {
       cell.dataset.tile = tile;
       cell.dataset.portals = signature;
       cell.classList.toggle('wall', tile === '#');
+      cell.classList.toggle('finish-cell', finish);
       cell.replaceChildren();
+      if (finish) cell.append(makeTile('finish-mark'));
       if (goal) cell.append(makeTile('goal'));
       if ('$*'.includes(tile)) cell.append(makeTile(tile === '*' ? 'crate placed' : 'crate'));
       if ('@+'.includes(tile)) cell.append(makeTile('player'));
@@ -160,7 +163,8 @@ function renderBoard(state) {
       });
       const [x, y] = point(coordinate);
       const label = ends.map(({ side, pair }) => sideNames[side] + (pair ? '传送门 ' + pair : '等待配对')).join('，');
-      cell.setAttribute('aria-label', '坐标 ' + x + ', ' + y + '，' + tileName[tile] + (label ? '，' + label : ''));
+      cell.setAttribute('aria-label', '坐标 ' + x + ', ' + y + '，' + tileName[tile] +
+        (finish ? '，玩家终点' : '') + (label ? '，' + label : ''));
     }
     cell.tabIndex = editable ? 0 : -1;
     cell.disabled = !editable;
@@ -197,13 +201,14 @@ function renderMap() {
   $('portal-help').textContent = portalMessage || (pendingPortal ? '已选第一端，再点墙或箱子的另一条边。' :
     '点墙或箱子的两条边配对。点击已有端点可移除整对。');
   $('map-info').textContent = '无限地图 · ' + map.initial.boxes.length + ' 个箱子 · ' + map.goals.size + ' 个目标';
+  $('finish-status').textContent = map.finish === null ? '玩家终点可选' : '已设置玩家终点';
   $('move-count').textContent = '移动 ' + manual.moves + ' 步 · 推箱 ' + manual.pushes + ' 次';
   const problem = editing || watching ? validate(map) || (watching ? trainingProblem : '') : '';
   const solved = !editing && won(map, state);
   $('map-note').className = 'map-note' + (problem ? ' error' : solved ? ' success' : '');
   const note = problem || (editing ? '地图可试玩和训练' :
     recording ? (solved ? '示范已通关，可以保存。' : '示范中。走几步或推几次箱后即可保存。') :
-    playing ? (solved ? '通关！' : '已就位 ' + placed(map, state) + ' / ' + map.goals.size) :
+    playing ? (solved ? '通关！' : objectiveProgress(state)) :
     watching ? watchNote(state, solved) : replayMessage);
   if ($('map-note').textContent !== note) $('map-note').textContent = note;
   if (watching) {
@@ -215,9 +220,15 @@ function renderMap() {
   renderBoard(state);
 }
 
+function objectiveProgress(state) {
+  const covered = placed(map, state);
+  if (map.finish !== null && covered === map.goals.size && state.player !== map.finish) return '请走到玩家终点。';
+  return '目标已覆盖 ' + covered + ' / ' + map.goals.size;
+}
+
 function watchNote(state, solved) {
   if (!trainer) return '开始训练后，可在这里看 AI 走位和推箱。';
-  const position = '目标已覆盖 ' + placed(map, state) + ' / ' + map.goals.size;
+  const position = objectiveProgress(state);
   if (!running && trainer.episodes >= target) return '本批训练完成 · ' + position;
   if (!running) return '训练已暂停 · ' + position;
   if (solved) return '本回合通关';
@@ -258,7 +269,7 @@ function saveLevels() {
     localStorage.setItem(storageKey, JSON.stringify({
       index: library.index,
       levels: library.entries.map(entry => ({
-        name: entry.name, code: writeWorld(entry.tiles, entry.chainPush, entry.portals), demonstration: entry.demonstration,
+        name: entry.name, code: writeWorld(entry.tiles, entry.chainPush, entry.portals, entry.finish), demonstration: entry.demonstration,
       })),
     }));
   } catch { /* Storage is optional. */ }
@@ -278,8 +289,8 @@ function loadBoard(recenter) {
   watchSegment = null;
   watchResult = null;
   nextWatchAt = 0;
-  map = world(level.tiles, level.chainPush, level.portals);
-  area = bounds(level.tiles);
+  map = world(level.tiles, level.chainPush, level.portals, level.finish);
+  area = bounds(level.tiles, map.finish);
   manual = map.initial;
   undo = [];
   manualPath = [];
@@ -321,7 +332,7 @@ function addLevels(entries) {
   selectLevel(first);
 }
 
-function changeMap(tiles, recenter = false, chainPush = level.chainPush, portals = level.portals ?? []) {
+function changeMap(tiles, recenter = false, chainPush = level.chainPush, portals = level.portals ?? [], finish = map.finish) {
   stopActivity();
   sessions.delete(level);
   trainer = null;
@@ -331,6 +342,7 @@ function changeMap(tiles, recenter = false, chainPush = level.chainPush, portals
   level.tiles = tiles;
   level.chainPush = chainPush;
   level.portals = portals;
+  level.finish = finish;
   level.demonstration = [];
   saveLevels();
   loadBoard(recenter);
@@ -343,6 +355,19 @@ $('chain-push').addEventListener('change', event => changeMap(map.tiles, false, 
 
 function paint(coordinate) {
   const old = map.tiles.get(coordinate) ?? ' ';
+  if (brush === 'finish') {
+    if (old === '#') {
+      $('map-note').textContent = '请在可行走的格子上设置玩家终点。';
+      $('map-note').classList.add('error');
+      return;
+    }
+    changeMap(map.tiles, false, level.chainPush, level.portals, map.finish === coordinate ? null : coordinate);
+    return;
+  }
+  if (brush === ' ' && map.finish === coordinate) {
+    changeMap(map.tiles, false, level.chainPush, level.portals, null);
+    return;
+  }
   const wasGoal = '.*+'.includes(old);
   const wasPlayer = '@+'.includes(old);
   let tile = brush;
@@ -364,7 +389,8 @@ function paint(coordinate) {
   const sameHost = portalHost(tile) && portalHost(old) && (tile === '#') === (old === '#');
   const removed = new Set();
   if (!sameHost) portals.forEach((end, i) => { if (end.cell === coordinate) removed.add(Math.floor(i / 2)); });
-  changeMap(tiles, false, level.chainPush, portals.filter((_, i) => !removed.has(Math.floor(i / 2))));
+  const finish = tile === '#' && map.finish === coordinate ? null : map.finish;
+  changeMap(tiles, false, level.chainPush, portals.filter((_, i) => !removed.has(Math.floor(i / 2))), finish);
 }
 
 function cellAt(element) {
@@ -450,7 +476,7 @@ board.addEventListener('pointerdown', event => {
   const pan = event.button === 2;
   const coordinate = cellAt(event.target);
   if (gesture || (!pan && (mode !== 'edit' || event.button !== 0 || !coordinate))) return;
-  if (!pan && brush === 'portal') return;
+  if (!pan && (brush === 'portal' || brush === 'finish')) return;
   event.preventDefault();
   gesture = { id: event.pointerId, pan, x: event.clientX, y: event.clientY, camera, lastCell: null };
   board.setPointerCapture(event.pointerId);
@@ -476,7 +502,7 @@ board.addEventListener('click', event => {
   const coordinate = cellAt(event.target);
   if (mode !== 'edit' || !coordinate) return;
   if (brush === 'portal') portalClick(event, coordinate);
-  else if (event.detail === 0) paint(coordinate);
+  else if (brush === 'finish' || event.detail === 0) paint(coordinate);
 });
 
 function activeState() {
@@ -550,7 +576,7 @@ $('reset-play').addEventListener('click', resetPlay);
 
 function getTrainer() {
   if (trainer) return trainer;
-  const field = trainingMap(map.tiles, area, level.chainPush, level.portals);
+  const field = trainingMap(map.tiles, area, level.chainPush, level.portals, map.finish);
   if (field) return new Trainer(field);
   trainingProblem = '摆放范围超过 40,000 格训练区。请缩小关卡范围后再试。';
   return null;
@@ -839,7 +865,7 @@ function dialogError(message) {
 
 $('help').addEventListener('click', () => {
   openDialog('使用说明', '<p>地图从空白开始，按住鼠标右键拖动可向四周平移。选好工具后，用左键点击或拖动绘制。</p>' +
-    '<p>放置一个玩家和至少一个目标，箱子数可以多于目标数。所有目标都被箱子覆盖即可通关，多余箱子可以留在其他位置。点击「回到起点」可回到玩家附近。</p>' +
+    '<p>放置玩家起点和箱子目标，箱子数可以多于目标数。选「玩家终点」放置一面旗，再点旗子可移除。有旗时，玩家也要走到旗子处才能通关。只放旗子也可以做走位关卡。</p>' +
     '<p>点「手动试玩」，用方向键、WASD 或屏幕方向按钮移动。勾选「允许连推多个箱子」后，玩家和 AI 都能一步推动相邻的一整排箱子，计作一次推箱。</p>' +
     '<p>用「传送门」依次点选墙或箱子的两条边。同编号的两端双向相通。墙门可直接进入。沿带门箱子的门面方向推时，前箱有空间就一起推，前箱紧贴墙时先传走前箱。带门箱子贴墙后再推，玩家从自己碰到的门进入（向右推碰到左边）。如果碰到的边没有门，才会尝试朝墙的门。选定的出口被堵时，这次传送会被挡住。</p>' +
     '<p>开始训练后，左侧地图会显示 AI 的每一步。可在「观战 AI」中调速度或暂停。切换到编辑或试玩时，AI 会继续加速训练。</p>' +
@@ -881,7 +907,7 @@ $('map-code').addEventListener('click', () => {
     '<textarea id="map-text" aria-label="地图文本" aria-describedby="symbols" spellcheck="false" wrap="off"></textarea>',
   [
     actionButton('下载当前地图', 'outline plain', () => {
-      const url = URL.createObjectURL(new Blob([writeWorld(map.tiles, level.chainPush, level.portals) + '\n'], { type: 'application/json' }));
+      const url = URL.createObjectURL(new Blob([writeWorld(map.tiles, level.chainPush, level.portals, map.finish) + '\n'], { type: 'application/json' }));
       const link = document.createElement('a');
       link.href = url;
       link.download = 'sokoban-map.json';
@@ -891,14 +917,14 @@ $('map-code').addEventListener('click', () => {
     actionButton('导入文本', 'primary', () => {
       try {
         const imported = readLevel($('map-text').value);
-        changeMap(imported.tiles, true, imported.chainPush, imported.portals ?? []);
+        changeMap(imported.tiles, true, imported.chainPush, imported.portals ?? [], imported.finish ?? null);
         dialog.close();
       } catch (error) {
         dialogError(error.message);
       }
     }),
   ]);
-  $('map-text').value = writeWorld(map.tiles, level.chainPush, level.portals);
+  $('map-text').value = writeWorld(map.tiles, level.chainPush, level.portals, map.finish);
 });
 
 renderLevelPicker();

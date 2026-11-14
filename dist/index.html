@@ -6,9 +6,9 @@
   <meta name="description" content="绘制自定义地图，手动试玩，观察 AI 通过强化学习掌握推箱子。">
   <meta name="theme-color" content="#111715">
   <title>推箱子实验室</title>
-  <link rel="stylesheet" href="style.css?v=7">
-  <script src="engine.js?v=10" defer></script>
-  <script src="app.js?v=10" defer></script>
+  <link rel="stylesheet" href="style.css?v=11">
+  <script src="engine.js?v=11" defer></script>
+  <script src="app.js?v=11" defer></script>
 </head>
 <body>
   <header class="top">
@@ -52,9 +52,11 @@
             <button type="button" data-brush="." aria-pressed="false"><i class="sample goal"></i>目标</button>
             <button type="button" data-brush="$" aria-pressed="false"><i class="sample crate"></i>箱子</button>
             <button type="button" data-brush="@" aria-pressed="false"><i class="sample player"></i>玩家</button>
+            <button type="button" data-brush="finish" aria-pressed="false"><i class="sample finish-mark"></i>玩家终点</button>
             <button type="button" data-brush="portal" aria-pressed="false"><i class="sample portal-sample"></i>传送门</button>
             <button type="button" data-brush=" " aria-pressed="false"><i class="sample eraser"></i>橡皮</button>
           </div>
+          <div class="secondary" id="finish-status"></div>
           <div class="portal-tools"><span id="portal-help" role="status" hidden></span><button class="plain" id="portal-cancel" type="button" hidden>取消选边</button></div>
         </div>
         <div class="map-toolbar play-tools" id="play-tools" hidden>
@@ -142,7 +144,7 @@
       </section>
     </div>
 
-    <footer><span>所有目标点都被箱子覆盖即可通关。</span><span><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> 或 <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> 移动</span></footer>
+    <footer><span>覆盖所有箱子目标，有旗时还要走到旗子处。</span><span><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> 或 <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> 移动</span></footer>
   </main>
 
   <dialog id="dialog" aria-labelledby="dialog-title">
