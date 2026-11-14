@@ -254,14 +254,8 @@
 
   function playerPortal(map, state, occupied, player, direction) {
     const host = map.adjacent(player, direction);
-    if (map.isWall(host)) return portalOn(map, state, host, opposite(direction));
-    if (occupied.has(host) && map.isWall(map.adjacent(host, direction))) {
-      const touched = portalOn(map, state, host, opposite(direction));
-      if (touched >= 0) return touched;
-      // A box with only a forward door still supports the wall-triggered route.
-      return portalOn(map, state, host, direction);
-    }
-    return -1;
+    const canEnter = map.isWall(host) || (occupied.has(host) && map.isWall(map.adjacent(host, direction)));
+    return canEnter ? portalOn(map, state, host, opposite(direction)) : -1;
   }
 
   function portalStep(map, state, direction) {
