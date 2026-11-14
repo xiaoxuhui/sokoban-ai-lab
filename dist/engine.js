@@ -144,8 +144,8 @@
 
   function validate(map) {
     if (map.initial.player === -1) return '请放置一个玩家起点。';
-    if (!map.initial.boxes.length) return '请至少放置一个箱子。';
-    if (map.initial.boxes.length !== map.goals.size) return '箱子和目标点的数量必须相同。';
+    if (!map.goals.size) return '请至少放置一个目标点。';
+    if (map.initial.boxes.length < map.goals.size) return '箱子不足，无法覆盖所有目标点。';
     return '';
   }
 
@@ -154,16 +154,15 @@
   }
 
   function won(map, state) {
-    return state.boxes.length > 0 && placed(map, state) === state.boxes.length;
+    return map.goals.size > 0 && placed(map, state) === map.goals.size;
   }
 
-  function pushLanding(map, first, direction, occupied, distances) {
+  function pushLanding(map, first, direction, occupied) {
     let next = map.neighbor(first, direction);
     while (next !== -1 && occupied.has(next)) {
-      if (!map.chainPush || (distances && distances[next] < 0)) return -1;
+      if (!map.chainPush) return -1;
       next = map.neighbor(next, direction);
     }
-    if (next !== -1 && distances && distances[next] < 0) return -1;
     return next;
   }
 
@@ -220,12 +219,17 @@
   function choices(map, state, distances) {
     const area = reach(map, state);
     const actions = [];
+    // Extra boxes can occupy squares from which no goal is reachable.
+    const spare = state.boxes.length - map.goals.size;
+    const stranded = state.boxes.filter(box => distances[box] < 0).length;
     state.boxes.forEach(box => {
       map.next[box].forEach((_, direction) => {
         const from = map.next[box][(direction + 2) % 4];
         if (from < 0 || area.previous[from] < 0) return;
-        const to = pushLanding(map, box, direction, area.boxes, distances);
-        if (to >= 0) actions.push({ box, to, from, direction, id: box * 4 + direction });
+        const to = pushLanding(map, box, direction, area.boxes);
+        if (to < 0) return;
+        const nextStranded = stranded - Number(distances[box] < 0) + Number(distances[to] < 0);
+        if (nextStranded <= spare) actions.push({ box, to, from, direction, id: box * 4 + direction });
       });
     });
     return { area, actions, key: `${area.first}:${state.boxes.join(',')}` };
@@ -284,8 +288,9 @@
     }
 
     estimate(action) {
-      const distance = this.distances[action.box];
-      return distance < 0 ? 0 : 0.24 * (distance - this.distances[action.to]);
+      const from = this.distances[action.box];
+      const to = this.distances[action.to];
+      return from < 0 || to < 0 ? 0 : 0.24 * (from - to);
     }
 
     value(key, action) {

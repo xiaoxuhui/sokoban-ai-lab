@@ -187,7 +187,7 @@ function renderMap() {
 
 function watchNote(state, solved) {
   if (!trainer) return '开始训练后，可在这里看 AI 走位和推箱。';
-  const position = '箱子已就位 ' + placed(map, state) + ' / ' + map.goals.size;
+  const position = '目标已覆盖 ' + placed(map, state) + ' / ' + map.goals.size;
   if (!running && trainer.episodes >= target) return '本批训练完成 · ' + position;
   if (!running) return '训练已暂停 · ' + position;
   if (solved) return '本回合通关';
@@ -731,7 +731,7 @@ function dialogError(message) {
 
 $('help').addEventListener('click', () => {
   openDialog('使用说明', '<p>地图从空白开始，按住鼠标右键拖动可向四周平移。选好工具后，用左键点击或拖动绘制。</p>' +
-    '<p>放置一个玩家，并为每个箱子放置一个目标。点击「回到起点」可回到玩家附近。</p>' +
+    '<p>放置一个玩家和至少一个目标，箱子数可以多于目标数。所有目标都被箱子覆盖即可通关，多余箱子可以留在其他位置。点击「回到起点」可回到玩家附近。</p>' +
     '<p>点「手动试玩」，用方向键、WASD 或屏幕方向按钮移动。勾选「允许连推多个箱子」后，玩家和 AI 都能一步推动相邻的一整排箱子，计作一次推箱。</p>' +
     '<p>开始训练后，左侧地图会显示 AI 的每一步。可在「观战 AI」中调速度或暂停。切换到编辑或试玩时，AI 会继续加速训练。</p>' +
     '<p>点「示范几步」，从起点演示走位或推箱，再点「保存示范」。AI 每两回合会跟随示范一次，然后自行继续。胜率只统计独立尝试。</p>' +
