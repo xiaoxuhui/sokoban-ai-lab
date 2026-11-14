@@ -306,9 +306,11 @@
       const facing = portalOn(map, state, ahead, opposite(direction));
       if (facing >= 0 && !rear) rear = { entrance: facing, cargo: box, moved: new Map() };
       if (forward >= 0) {
-        const intake = { entrance: forward, cargo: ahead, moved: new Map() };
-        if (!map.chainPush) return rear ?? intake;
-        front ??= intake;
+        if (!map.chainPush) return rear ?? { entrance: forward, cargo: ahead, moved: new Map() };
+        if (!front) {
+          // Once the front box leaves, the pushed boxes behind it can fill the gap.
+          front = { entrance: forward, cargo: ahead, moved: new Map(moved).set(box, ahead) };
+        }
       }
       if (!map.chainPush && facing < 0 && !map.isWall(beyond)) return null;
       if (!map.chainPush && map.isWall(beyond)) {
