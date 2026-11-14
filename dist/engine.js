@@ -238,6 +238,9 @@
     const host = map.adjacent(player, direction);
     if (map.isWall(host)) return portalOn(map, state, host, opposite(direction));
     if (occupied.has(host) && map.isWall(map.adjacent(host, direction))) {
+      const touched = portalOn(map, state, host, opposite(direction));
+      if (touched >= 0) return touched;
+      // A box with only a forward door still supports the wall-triggered route.
       return portalOn(map, state, host, direction);
     }
     return -1;
