@@ -136,7 +136,10 @@
       const [x, y] = point(cell);
       rows[y - top + margin][x - left + margin] = tile;
     }
-    return compile(rows.map(row => row.join('')), chainPush);
+    return {
+      ...compile(rows.map(row => row.join('')), chainPush),
+      worldCell: cell => key(left - margin + cell % width, top - margin + Math.floor(cell / width)),
+    };
   }
 
   function validate(map) {
@@ -240,6 +243,7 @@
       this.history = [];
       this.best = won(map, map.initial) ? { path: [], pushes: 0 } : null;
       this.last = map.initial;
+      this.state = map.initial;
       this.maxPushes = Math.min(160, Math.max(35, map.initial.boxes.length * 28));
     }
 
@@ -266,7 +270,7 @@
 
     *attempt() {
       const map = this.map;
-      let state = map.initial;
+      let state = this.state = map.initial;
       let current = choices(map, state, this.distances);
       const path = [];
       const trace = [];
@@ -283,8 +287,10 @@
           walking.push(current.area.via[cell]);
         }
         walking.reverse();
+        const beforePush = state;
         const nextState = step(map, { ...state, player: action.from, moves: state.moves + walking.length }, action.direction);
-        path.push(...walking, action.direction);
+        walking.push(action.direction);
+        path.push(...walking);
         const next = choices(map, nextState, this.distances);
         const solved = won(map, nextState);
         const stuck = next.actions.length === 0;
@@ -301,9 +307,9 @@
         }
         values?.set(action.id, learned);
         trace.push([current.key, action, reward]);
-        state = nextState;
+        state = this.state = nextState;
         current = next;
-        yield;
+        yield { from: beforePush, directions: walking };
       }
 
       const success = won(map, state);

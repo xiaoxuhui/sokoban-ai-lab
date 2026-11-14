@@ -39,6 +39,10 @@ let attempt = null;
 let running = false;
 let target = 0;
 let frame = 0;
+let watchState = null;
+let watchSegment = null;
+let watchResult = null;
+let nextWatchAt = 0;
 let playback = 0;
 let replayState = null;
 let replayMessage = '';
@@ -142,23 +146,43 @@ function makeTile(className) {
 function renderMap() {
   const editing = mode === 'edit';
   const playing = mode === 'play';
+  const watching = mode === 'watch';
   const state = activeState();
   $('edit-mode').setAttribute('aria-pressed', editing);
   $('play-mode').setAttribute('aria-pressed', playing);
+  $('watch-mode').setAttribute('aria-pressed', watching);
   $('edit-tools').hidden = !editing;
   $('play-tools').hidden = !playing;
+  $('watch-tools').hidden = !watching;
   $('map-actions').hidden = !editing;
   $('dpad').hidden = !playing;
   $('undo').disabled = !undo.length;
   $('reset-play').disabled = !manual.moves;
   $('map-info').textContent = '无限地图 · ' + map.initial.boxes.length + ' 个箱子 · ' + map.goals.size + ' 个目标';
   $('move-count').textContent = '移动 ' + manual.moves + ' 步 · 推箱 ' + manual.pushes + ' 次';
-  const problem = editing ? validate(map) : '';
+  const problem = editing || watching ? validate(map) || (watching ? trainingProblem : '') : '';
   const solved = !editing && won(map, state);
   $('map-note').className = 'map-note' + (problem ? ' error' : solved ? ' success' : '');
-  $('map-note').textContent = editing ? (problem || '地图可试玩和训练') :
-    playing ? (solved ? '通关！' : '已就位 ' + placed(map, state) + ' / ' + map.goals.size) : replayMessage;
+  const note = problem || (editing ? '地图可试玩和训练' :
+    playing ? (solved ? '通关！' : '已就位 ' + placed(map, state) + ' / ' + map.goals.size) :
+    watching ? watchNote(state, solved) : replayMessage);
+  if ($('map-note').textContent !== note) $('map-note').textContent = note;
+  if (watching) {
+    const episode = Math.min((trainer?.episodes ?? 0) + Number(watchResult === null), target);
+    $('watch-progress').textContent = (episode ? '第 ' + number.format(episode) + ' 回合 · ' : '') +
+      '移动 ' + state.moves + ' 步 · 推箱 ' + state.pushes + ' 次';
+  }
   renderBoard(state);
+}
+
+function watchNote(state, solved) {
+  if (!trainer) return '开始训练后，可在这里看 AI 走位和推箱。';
+  const position = '箱子已就位 ' + placed(map, state) + ' / ' + map.goals.size;
+  if (!running && trainer.episodes >= target) return '本批训练完成 · ' + position;
+  if (!running) return '训练已暂停 · ' + position;
+  if (solved) return '本回合通关';
+  if (watchResult === false) return '本回合未通关，AI 将重新尝试';
+  return position;
 }
 
 function setMode(next) {
@@ -170,6 +194,11 @@ function setMode(next) {
   playback = 0;
   mode = next;
   if (mode === 'play') followPlayer(manual);
+  if (mode === 'watch') {
+    nextWatchAt = 0;
+    if (!watchState && trainer) syncWatchState();
+    followPlayer(activeState());
+  }
   renderMap();
   renderTraining();
 }
@@ -198,6 +227,10 @@ function renderLevelPicker() {
 }
 
 function loadBoard(recenter) {
+  watchState = null;
+  watchSegment = null;
+  watchResult = null;
+  nextWatchAt = 0;
   map = world(level.tiles, level.chainPush);
   area = bounds(level.tiles);
   manual = map.initial;
@@ -331,6 +364,7 @@ board.addEventListener('click', event => {
 });
 
 function activeState() {
+  if (mode === 'watch') return watchState ?? map.initial;
   return mode === 'edit' ? map.initial : mode === 'play' ? manual : replayState;
 }
 
@@ -349,6 +383,8 @@ document.querySelectorAll('[data-brush]').forEach(button => {
 });
 $('edit-mode').addEventListener('click', () => setMode('edit'));
 $('play-mode').addEventListener('click', () => setMode('play'));
+$('watch-mode').addEventListener('click', () => setMode('watch'));
+$('watch-speed').addEventListener('change', () => { nextWatchAt = 0; });
 
 function move(direction) {
   if (mode !== 'play' || won(map, manual)) return;
@@ -442,7 +478,10 @@ function renderTraining() {
   $('rate').textContent = episodes ? Math.round(trainer.rate * 100) + '%' : '—';
   $('best').textContent = best ? number.format(best.pushes) : '—';
   $('train').disabled = Boolean(problem) || playback !== 0;
-  $('train').lastElementChild.textContent = running ? '暂停训练' : paused ? '继续训练' : episodes ? '再训练一批' : '开始训练';
+  const action = running ? '暂停训练' : paused ? '继续训练' : episodes ? '再训练一批' : '开始训练';
+  $('train').lastElementChild.textContent = action;
+  $('watch-run').textContent = action;
+  $('watch-run').disabled = $('train').disabled;
   $('train').firstElementChild.textContent = running ? 'Ⅱ' : '▶';
   $('budget').disabled = running || paused;
   $('clear-training').disabled = !trainer || playback !== 0;
@@ -457,19 +496,68 @@ function renderTraining() {
   drawChart();
 }
 
-function trainFrame() {
-  if (!running) return;
+function toWorldState(state) {
+  const coordinate = trainer.map.worldCell;
+  return { ...state, player: coordinate(state.player), boxes: state.boxes.map(coordinate) };
+}
+
+function syncWatchState() {
+  watchState = toWorldState(trainer.state);
+  watchResult = attempt ? null : won(trainer.map, trainer.state);
+}
+
+function trainFast() {
+  watchSegment = null;
   const deadline = performance.now() + 9;
   do {
     attempt ??= trainer.attempt();
     if (attempt.next().done) attempt = null;
   } while (trainer.episodes < target && performance.now() < deadline);
+  watchState = null;
+  if (mode === 'watch') syncWatchState();
+}
+
+function trainVisible(now, delay) {
+  if (now < nextWatchAt) return false;
+  nextWatchAt = now + delay;
+  if (watchSegment) {
+    watchState = step(map, watchState, watchSegment.directions[watchSegment.index++]);
+    if (watchSegment.index === watchSegment.directions.length) watchSegment = null;
+    return true;
+  }
+  if (!attempt) {
+    attempt = trainer.attempt();
+    watchState = map.initial;
+    watchResult = null;
+  }
+  const event = attempt.next();
+  if (event.done) {
+    attempt = null;
+    syncWatchState();
+    nextWatchAt = now + Math.max(400, delay);
+  } else {
+    watchState = toWorldState(event.value.from);
+    watchSegment = { directions: event.value.directions, index: 0 };
+  }
+  return true;
+}
+
+function trainFrame(now) {
+  if (!running) return;
+  const delay = mode === 'watch' ? Number($('watch-speed').value) : 0;
+  const advanced = delay ? trainVisible(now, delay) : (trainFast(), true);
   if (trainer.episodes >= target) running = false;
-  renderTraining();
+  if (advanced) {
+    if (mode === 'watch') {
+      if (!gesture?.pan) followPlayer(watchState);
+      renderMap();
+    }
+    renderTraining();
+  }
   if (running) frame = requestAnimationFrame(trainFrame);
 }
 
-$('train').addEventListener('click', () => {
+function toggleTraining() {
   if (running) pauseTraining();
   else {
     if (validate(map)) return;
@@ -478,6 +566,7 @@ $('train').addEventListener('click', () => {
       const field = trainingMap(map.tiles, area, level.chainPush);
       if (!field) {
         trainingProblem = '摆放范围超过 40,000 格训练区。请缩小关卡范围后再试。';
+        renderMap();
         renderTraining();
         return;
       }
@@ -485,18 +574,31 @@ $('train').addEventListener('click', () => {
     }
     if (trainer.episodes >= target) target = trainer.episodes + Number($('budget').value);
     running = true;
+    setMode('watch');
+    const view = board.getBoundingClientRect();
+    if (view.top < 0 || view.top >= window.innerHeight) board.scrollIntoView({ block: 'center' });
     frame = requestAnimationFrame(trainFrame);
   }
+  if (mode === 'watch') renderMap();
   renderTraining();
-});
+}
+
+$('train').addEventListener('click', toggleTraining);
+$('watch-run').addEventListener('click', toggleTraining);
 $('clear-training').addEventListener('click', () => {
   pauseTraining();
   sessions.delete(level);
   trainer = null;
   attempt = null;
   target = 0;
+  watchState = null;
+  watchSegment = null;
+  watchResult = null;
   if (mode === 'replay') setMode('edit');
-  else renderTraining();
+  else {
+    renderMap();
+    renderTraining();
+  }
 });
 $('replay').addEventListener('click', () => {
   if (!trainer?.best || running || playback) return;
@@ -555,6 +657,7 @@ $('help').addEventListener('click', () => {
   openDialog('使用说明', '<p>地图从空白开始，按住鼠标右键拖动可向四周平移。选好工具后，用左键点击或拖动绘制。</p>' +
     '<p>放置一个玩家，并为每个箱子放置一个目标。点击「回到起点」可回到玩家附近。</p>' +
     '<p>点「手动试玩」，用方向键、WASD 或屏幕方向按钮移动。勾选「允许连推多个箱子」后，玩家和 AI 都能一步推动相邻的一整排箱子，计作一次推箱。</p>' +
+    '<p>开始训练后，左侧地图会显示 AI 的每一步。可在「观战 AI」中调速度或暂停。切换到编辑或试玩时，AI 会继续加速训练。</p>' +
     '<p>AI 用 Q-learning 反复练习。训练区包含已绘制的地图和外围三格空地，最多 40,000 格。找到通关路线后即可回放。</p>' +
     '<p>用关卡列表逐关训练。切换时会暂停当前训练，切回即可继续。地图和规则保存在浏览器，训练进度保留至页面关闭或刷新。修改地图或规则会清空当前关的训练进度。</p>',
   [actionButton('知道了', 'primary', () => dialog.close())]);
