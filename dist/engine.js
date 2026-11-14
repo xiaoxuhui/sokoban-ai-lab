@@ -318,7 +318,7 @@
   }
 
   function pushThroughPortal(map, state, occupied, first, direction, entered = -1) {
-    const initialBox = entered < 0 ? first : -1;
+    const entryCell = first;
     const visited = new Set();
     if (entered >= 0) visited.add(entered >> 1);
     while (true) {
@@ -344,7 +344,9 @@
         state.portalCells.forEach((cell, i) => { if (cell === cargo) portalCells[i] = landing; });
       }
       if (boxes.includes(state.player)) return state;
-      const player = visited.size || boxes.includes(initialBox) ? state.player : initialBox;
+      // If the player entered a portal, follow the push into the vacated exit cell.
+      const canFollow = entered >= 0 || !visited.size;
+      const player = canFollow && !boxes.includes(entryCell) ? entryCell : state.player;
       if (typeof first === 'number') boxes.sort((a, b) => a - b);
       return { player, boxes, portalCells, moves: state.moves + 1, pushes: state.pushes + 1 };
     }
