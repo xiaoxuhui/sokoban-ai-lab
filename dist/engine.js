@@ -15,9 +15,9 @@
     while (rows[0] === '') rows.shift();
     while (rows.at(-1) === '') rows.pop();
     const width = rows[0]?.length ?? 0;
-    if (width < 5 || width > 16 || rows.length < 5 || rows.length > 16 ||
+    if (!width || !rows.length ||
         rows.some(row => row.length !== width || [...row].some(tile => !symbols.includes(tile)))) {
-      throw new Error('地图须为 5 至 16 格的矩形，每行等宽。仅支持 # 空格 . @ $ * +。');
+      throw new Error('字符地图的每行须等宽，仅支持 # 空格 . @ $ * +。');
     }
     if (rows.join('').split('').filter(tile => tile === '@' || tile === '+').length > 1) {
       throw new Error('地图只能有一个玩家。');
@@ -42,7 +42,97 @@
       const cell = y * width + x;
       return x < 0 || x >= width || y < 0 || y >= rows.length || tiles[cell] === '#' ? -1 : cell;
     }));
-    return { width, tiles, goals, next, initial: { player, boxes, moves: 0, pushes: 0 } };
+    return { width, tiles, goals, next, neighbor: (cell, direction) => next[cell][direction], initial: { player, boxes, moves: 0, pushes: 0 } };
+  }
+
+  const key = (x, y) => x + ',' + y;
+  const point = cell => cell.split(',').map(Number);
+
+  function fromRows(rows) {
+    const tiles = new Map();
+    rows.forEach((row, y) => [...row].forEach((tile, x) => {
+      if (tile !== ' ') tiles.set(key(x, y), tile);
+    }));
+    return tiles;
+  }
+
+  function readWorld(text) {
+    if (!text.trim()) return new Map();
+    if (!text.trimStart().startsWith('{')) return fromRows(readMap(text));
+    const data = JSON.parse(text);
+    if (data?.version !== 1 || !Array.isArray(data.tiles)) throw new Error('地图 JSON 须包含 version: 1 和 tiles 数组。');
+    const tiles = new Map();
+    let hasPlayer = false;
+    for (const entry of data.tiles) {
+      if (!Array.isArray(entry) || entry.length !== 3) throw new Error('每格须写成 [横坐标, 纵坐标, 字符]。');
+      const [x, y, tile] = entry;
+      const cell = key(x, y);
+      if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y) ||
+          Math.abs(x) > 1e12 || Math.abs(y) > 1e12 ||
+          typeof tile !== 'string' || tile.length !== 1 || !symbols.includes(tile) || tile === ' ' || tiles.has(cell)) {
+        throw new Error('请检查地图坐标、重复格子和地图字符。');
+      }
+      if ('@+'.includes(tile)) {
+        if (hasPlayer) throw new Error('地图只能有一个玩家。');
+        hasPlayer = true;
+      }
+      tiles.set(cell, tile);
+    }
+    return tiles;
+  }
+
+  function writeWorld(tiles) {
+    const lines = [...tiles].map(([cell, tile]) => JSON.stringify([...point(cell), tile]));
+    return '{\n  "version": 1,\n  "tiles": [' + (lines.length ? '\n    ' + lines.join(',\n    ') + '\n  ' : '') + ']\n}';
+  }
+
+  function world(tiles) {
+    const goals = new Set();
+    const boxes = [];
+    let player = -1;
+    for (const [cell, tile] of tiles) {
+      if ('.*+'.includes(tile)) goals.add(cell);
+      if ('$*'.includes(tile)) boxes.push(cell);
+      if ('@+'.includes(tile)) player = cell;
+    }
+    return {
+      tiles, goals, initial: { player, boxes, moves: 0, pushes: 0 },
+      neighbor(cell, direction) {
+        const [x, y] = point(cell);
+        const [dx, dy] = directions[direction];
+        const next = key(x + dx, y + dy);
+        return tiles.get(next) === '#' ? -1 : next;
+      },
+    };
+  }
+
+  function bounds(tiles) {
+    let left = Infinity;
+    let top = Infinity;
+    let right = -Infinity;
+    let bottom = -Infinity;
+    for (const cell of tiles.keys()) {
+      const [x, y] = point(cell);
+      left = Math.min(left, x);
+      right = Math.max(right, x);
+      top = Math.min(top, y);
+      bottom = Math.max(bottom, y);
+    }
+    return { left, top, right, bottom };
+  }
+
+  function trainingMap(tiles, area) {
+    const { left, top, right, bottom } = area;
+    const margin = 3;
+    const width = right - left + 1 + margin * 2;
+    const height = bottom - top + 1 + margin * 2;
+    if (width * height > 40000) return null;
+    const rows = Array.from({ length: height }, () => Array(width).fill(' '));
+    for (const [cell, tile] of tiles) {
+      const [x, y] = point(cell);
+      rows[y - top + margin][x - left + margin] = tile;
+    }
+    return compile(rows.map(row => row.join('')));
   }
 
   function validate(map) {
@@ -61,20 +151,21 @@
   }
 
   function step(map, state, direction) {
-    const player = map.next[state.player]?.[direction] ?? -1;
+    if (state.player === -1 || !directions[direction]) return state;
+    const player = map.neighbor(state.player, direction);
     if (player < 0) return state;
     const box = state.boxes.indexOf(player);
     if (box < 0) return { ...state, player, moves: state.moves + 1 };
-    const landing = map.next[player][direction];
+    const landing = map.neighbor(player, direction);
     if (landing < 0 || state.boxes.includes(landing)) return state;
     const boxes = [...state.boxes];
     boxes[box] = landing;
-    boxes.sort((a, b) => a - b);
+    if (typeof landing === 'number') boxes.sort((a, b) => a - b);
     return { player, boxes, moves: state.moves + 1, pushes: state.pushes + 1 };
   }
 
   function reach(map, state) {
-    const previous = new Int16Array(map.tiles.length).fill(-1);
+    const previous = new Int32Array(map.tiles.length).fill(-1);
     const via = new Uint8Array(map.tiles.length);
     const boxes = new Set(state.boxes);
     const queue = [state.player];
@@ -94,7 +185,7 @@
   }
 
   function distancesToGoals(map) {
-    const distances = new Int16Array(map.tiles.length).fill(-1);
+    const distances = new Int32Array(map.tiles.length).fill(-1);
     const queue = [...map.goals];
     queue.forEach(goal => { distances[goal] = 0; });
     for (let i = 0; i < queue.length; i++) {
@@ -155,6 +246,10 @@
     }
 
     episode() {
+      for (const _ of this.attempt()) { /* Complete the episode synchronously. */ }
+    }
+
+    *attempt() {
       const map = this.map;
       let state = map.initial;
       let current = choices(map, state, this.distances);
@@ -193,6 +288,7 @@
         trace.push([current.key, action, reward]);
         state = nextState;
         current = next;
+        yield;
       }
 
       const success = won(map, state);
@@ -222,7 +318,7 @@
     }
   }
 
-  const api = { examples, readMap, compile, validate, placed, won, step, Trainer };
+  const api = { examples, readMap, fromRows, readWorld, writeWorld, world, bounds, key, point, trainingMap, compile, validate, placed, won, step, Trainer };
   if (typeof module === 'object') module.exports = api;
   else root.Sokoban = api;
 })(globalThis);

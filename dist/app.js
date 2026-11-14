@@ -1,61 +1,111 @@
 'use strict';
 
-const { examples, readMap, compile, validate, placed, won, step, Trainer } = Sokoban;
+const { examples, fromRows, readWorld, writeWorld, world, bounds, key, point, trainingMap, validate, placed, won, step, Trainer } = Sokoban;
 const $ = id => document.getElementById(id);
 const board = $('board');
+const grid = $('grid');
 const dialog = $('dialog');
-const storageKey = 'sokoban-lab-map-v1';
+const storageKey = 'sokoban-lab-world-v1';
 const number = new Intl.NumberFormat('zh-CN');
 
-function loadRows() {
+function loadWorld() {
   try {
-    return readMap(localStorage.getItem(storageKey) ?? examples[0].join('\n'));
+    return readWorld(localStorage.getItem(storageKey) ?? localStorage.getItem('sokoban-lab-map-v1') ?? '');
   } catch {
-    return [...examples[0]];
+    return new Map();
   }
 }
 
-let rows = loadRows();
-let map = compile(rows);
+let map = world(loadWorld());
+let area = bounds(map.tiles);
 let brush = '#';
 let mode = 'edit';
 let manual = map.initial;
 let undo = [];
 let trainer = null;
+let trainingProblem = '';
+let attempt = null;
 let running = false;
 let target = 0;
 let frame = 0;
 let playback = 0;
 let replayState = null;
 let replayMessage = '';
-let pointer = null;
-let lastCell = -1;
-let cells = [];
+let gesture = null;
+let camera = { x: 0.5, y: 0.5 };
+let visibleArea = '';
+let cells = new Map();
 
 const tileName = { '#': '墙', ' ': '地板', '.': '目标', '$': '箱子', '@': '玩家', '*': '目标上的箱子', '+': '目标上的玩家' };
 
-function buildBoard() {
-  board.style.setProperty('--cols', map.width);
-  board.style.setProperty('--board-width', Math.min(480, map.width * 46, 370 * map.width / rows.length) + 'px');
-  cells = Array.from(map.tiles, (_, index) => {
-    const cell = document.createElement('button');
-    cell.type = 'button';
-    cell.className = 'cell';
-    cell.dataset.index = index;
-    return cell;
-  });
-  board.replaceChildren(...cells);
+function cellSize() {
+  return board.clientWidth < 420 ? 29 : 40;
+}
+
+function centerMap() {
+  if (!map.tiles.size) camera = { x: 0.5, y: 0.5 };
+  else if (map.initial.player !== -1) {
+    const [x, y] = point(map.initial.player);
+    camera = { x: x + 0.5, y: y + 0.5 };
+  } else {
+    camera = { x: (area.left + area.right + 1) / 2, y: (area.top + area.bottom + 1) / 2 };
+  }
+}
+
+function followPlayer(state) {
+  if (state.player === -1) return;
+  const [x, y] = point(state.player);
+  const size = cellSize();
+  if (Math.abs(x + 0.5 - camera.x) > board.clientWidth / size / 2 - 1.5 ||
+      Math.abs(y + 0.5 - camera.y) > board.clientHeight / size / 2 - 1.5) {
+    camera = { x: x + 0.5, y: y + 0.5 };
+  }
+}
+
+function layoutBoard() {
+  const size = cellSize();
+  const left = camera.x - board.clientWidth / size / 2;
+  const top = camera.y - board.clientHeight / size / 2;
+  const startX = Math.floor(left);
+  const startY = Math.floor(top);
+  const columns = Math.ceil(left + board.clientWidth / size) - startX;
+  const rowCount = Math.ceil(top + board.clientHeight / size) - startY;
+  const signature = [startX, startY, columns, rowCount].join(',');
+  grid.style.setProperty('--cell-size', size + 'px');
+  grid.style.setProperty('--cols', columns);
+  grid.style.transform = 'translate(' + (startX - left) * size + 'px,' + (startY - top) * size + 'px)';
+  if (signature === visibleArea) return;
+  visibleArea = signature;
+  const nextCells = new Map();
+  for (let y = startY; y < startY + rowCount; y++) {
+    for (let x = startX; x < startX + columns; x++) {
+      const coordinate = key(x, y);
+      let cell = cells.get(coordinate);
+      if (!cell) {
+        cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = 'cell';
+        cell.dataset.cell = coordinate;
+      }
+      nextCells.set(coordinate, cell);
+    }
+  }
+  const focused = grid.contains(document.activeElement) ? document.activeElement : null;
+  grid.replaceChildren(...nextCells.values());
+  if (focused && grid.contains(focused)) focused.focus({ preventScroll: true });
+  cells = nextCells;
 }
 
 function renderBoard(state) {
+  layoutBoard();
   const boxes = new Set(state.boxes);
   const editable = mode === 'edit';
   board.classList.toggle('editable', editable);
-  cells.forEach((cell, index) => {
-    const goal = map.goals.has(index);
-    const tile = map.tiles[index] === '#' ? '#' :
-      boxes.has(index) ? (goal ? '*' : '$') :
-      state.player === index ? (goal ? '+' : '@') : (goal ? '.' : ' ');
+  cells.forEach((cell, coordinate) => {
+    const goal = map.goals.has(coordinate);
+    const tile = map.tiles.get(coordinate) === '#' ? '#' :
+      boxes.has(coordinate) ? (goal ? '*' : '$') :
+      state.player === coordinate ? (goal ? '+' : '@') : (goal ? '.' : ' ');
     if (cell.dataset.tile !== tile) {
       cell.dataset.tile = tile;
       cell.classList.toggle('wall', tile === '#');
@@ -63,9 +113,8 @@ function renderBoard(state) {
       if (goal) cell.append(makeTile('goal'));
       if ('$*'.includes(tile)) cell.append(makeTile(tile === '*' ? 'crate placed' : 'crate'));
       if ('@+'.includes(tile)) cell.append(makeTile('player'));
-      const row = Math.floor(index / map.width) + 1;
-      const col = index % map.width + 1;
-      cell.setAttribute('aria-label', '第 ' + row + ' 行第 ' + col + ' 列，' + tileName[tile]);
+      const [x, y] = point(coordinate);
+      cell.setAttribute('aria-label', '坐标 ' + x + ', ' + y + '，' + tileName[tile]);
     }
     cell.tabIndex = editable ? 0 : -1;
     cell.disabled = !editable;
@@ -82,7 +131,7 @@ function makeTile(className) {
 function renderMap() {
   const editing = mode === 'edit';
   const playing = mode === 'play';
-  const state = editing ? map.initial : playing ? manual : replayState;
+  const state = activeState();
   $('edit-mode').setAttribute('aria-pressed', editing);
   $('play-mode').setAttribute('aria-pressed', playing);
   $('edit-tools').hidden = !editing;
@@ -91,12 +140,12 @@ function renderMap() {
   $('dpad').hidden = !playing;
   $('undo').disabled = !undo.length;
   $('reset-play').disabled = !manual.moves;
-  $('map-info').textContent = map.width + ' × ' + rows.length + ' 格 · ' + map.initial.boxes.length + ' 个箱子 · ' + map.goals.size + ' 个目标';
+  $('map-info').textContent = '无限地图 · ' + map.initial.boxes.length + ' 个箱子 · ' + map.goals.size + ' 个目标';
   $('move-count').textContent = '移动 ' + manual.moves + ' 步 · 推箱 ' + manual.pushes + ' 次';
   const problem = editing ? validate(map) : '';
   const solved = !editing && won(map, state);
   $('map-note').className = 'map-note' + (problem ? ' error' : solved ? ' success' : '');
-  $('map-note').textContent = editing ? (problem || '选中工具，点击或拖动绘制') :
+  $('map-note').textContent = editing ? (problem || '地图可试玩和训练') :
     playing ? (solved ? '通关！' : '已就位 ' + placed(map, state) + ' / ' + map.goals.size) : replayMessage;
   renderBoard(state);
 }
@@ -109,6 +158,7 @@ function setMode(next) {
   clearTimeout(playback);
   playback = 0;
   mode = next;
+  if (mode === 'play') followPlayer(manual);
   renderMap();
   renderTraining();
 }
@@ -118,70 +168,109 @@ function pauseTraining() {
   cancelAnimationFrame(frame);
 }
 
-function changeMap(nextRows) {
-  if (rows.join('\n') === nextRows.join('\n')) return;
+function changeMap(tiles, recenter = false) {
   pauseTraining();
   clearTimeout(playback);
   playback = 0;
   trainer = null;
+  trainingProblem = '';
+  attempt = null;
   target = 0;
-  const dimensionsChanged = nextRows.length !== rows.length || nextRows[0].length !== map.width;
-  rows = nextRows;
-  map = compile(rows);
+  map = world(tiles);
+  area = bounds(tiles);
   manual = map.initial;
   undo = [];
   mode = 'edit';
-  try { localStorage.setItem(storageKey, rows.join('\n')); } catch { /* Storage is optional. */ }
-  if (dimensionsChanged) buildBoard();
+  try { localStorage.setItem(storageKey, writeWorld(tiles)); } catch { /* Storage is optional. */ }
+  if (recenter) centerMap();
   renderMap();
   renderTraining();
 }
 
-function paint(index) {
-  const tiles = Array.from(map.tiles);
-  const old = tiles[index];
+function paint(coordinate) {
+  const old = map.tiles.get(coordinate) ?? ' ';
   const wasGoal = '.*+'.includes(old);
   const wasPlayer = '@+'.includes(old);
-  if (brush === '.' && old !== '#') tiles[index] = '$*'.includes(old) ? '*' : wasPlayer ? '+' : '.';
-  else if (brush === '$') tiles[index] = wasGoal ? '*' : '$';
-  else if (brush === '@') {
-    if (!wasPlayer && map.initial.player >= 0) {
-      const previous = map.initial.player;
-      tiles[previous] = tiles[previous] === '+' ? '.' : ' ';
-    }
-    tiles[index] = wasGoal ? '+' : '@';
-  } else if (brush === ' ') {
-    tiles[index] = old === '*' || old === '+' ? '.' : ' ';
-  } else tiles[index] = brush;
+  let tile = brush;
+  if (brush === '.') tile = '$*'.includes(old) ? '*' : wasPlayer ? '+' : '.';
+  if (brush === '$') tile = wasGoal ? '*' : '$';
+  if (brush === '@') tile = wasGoal ? '+' : '@';
+  if (brush === ' ') tile = old === '*' || old === '+' ? '.' : ' ';
+  if (tile === old) return;
 
-  const nextRows = rows.map((_, y) => tiles.slice(y * map.width, (y + 1) * map.width).join(''));
-  changeMap(nextRows);
+  const tiles = new Map(map.tiles);
+  if (brush === '@' && map.initial.player !== -1) {
+    const previous = map.initial.player;
+    if (tiles.get(previous) === '+') tiles.set(previous, '.');
+    else tiles.delete(previous);
+  }
+  if (tile === ' ') tiles.delete(coordinate);
+  else tiles.set(coordinate, tile);
+  changeMap(tiles);
 }
 
 function cellAt(element) {
   const cell = element?.closest('.cell');
-  return cell && board.contains(cell) ? Number(cell.dataset.index) : -1;
+  return cell && board.contains(cell) ? cell.dataset.cell : null;
 }
 
-function pointerPaint(index) {
-  if (index < 0 || index === lastCell) return;
-  lastCell = index;
-  paint(index);
+function pointerPaint(coordinate) {
+  if (!coordinate || coordinate === gesture.lastCell) return;
+  const previous = gesture.lastCell;
+  gesture.lastCell = coordinate;
+  if (previous && brush !== '@') {
+    const [fromX, fromY] = point(previous);
+    const [x, y] = point(coordinate);
+    const dx = x - fromX;
+    const dy = y - fromY;
+    const length = Math.max(Math.abs(dx), Math.abs(dy));
+    for (let i = 1; i < length; i++) {
+      paint(key(fromX + Math.round(dx * i / length), fromY + Math.round(dy * i / length)));
+    }
+  }
+  paint(coordinate);
 }
 
+board.addEventListener('contextmenu', event => event.preventDefault());
 board.addEventListener('pointerdown', event => {
-  if (mode !== 'edit' || pointer !== null || event.button !== 0 || cellAt(event.target) < 0) return;
-  pointer = event.pointerId;
-  lastCell = -1;
-  board.setPointerCapture(pointer);
-  pointerPaint(cellAt(event.target));
+  const pan = event.button === 2;
+  const coordinate = cellAt(event.target);
+  if (gesture || (!pan && (mode !== 'edit' || event.button !== 0 || !coordinate))) return;
+  event.preventDefault();
+  gesture = { id: event.pointerId, pan, x: event.clientX, y: event.clientY, camera, lastCell: null };
+  board.setPointerCapture(event.pointerId);
+  if (pan) board.classList.add('panning');
+  else pointerPaint(coordinate);
 });
 board.addEventListener('pointermove', event => {
-  if (pointer === event.pointerId && mode === 'edit') pointerPaint(cellAt(document.elementFromPoint(event.clientX, event.clientY)));
+  if (gesture?.id !== event.pointerId) return;
+  if (gesture.pan) {
+    const size = cellSize();
+    camera = {
+      x: gesture.camera.x - (event.clientX - gesture.x) / size,
+      y: gesture.camera.y - (event.clientY - gesture.y) / size,
+    };
+    renderBoard(activeState());
+  } else if (mode === 'edit') pointerPaint(cellAt(document.elementFromPoint(event.clientX, event.clientY)));
 });
-board.addEventListener('lostpointercapture', () => { pointer = null; });
+board.addEventListener('lostpointercapture', () => {
+  gesture = null;
+  board.classList.remove('panning');
+});
 board.addEventListener('click', event => {
-  if (mode === 'edit' && event.detail === 0 && cellAt(event.target) >= 0) paint(cellAt(event.target));
+  const coordinate = cellAt(event.target);
+  if (mode === 'edit' && event.detail === 0 && coordinate) paint(coordinate);
+});
+
+function activeState() {
+  return mode === 'edit' ? map.initial : mode === 'play' ? manual : replayState;
+}
+
+new ResizeObserver(() => renderBoard(activeState())).observe(board);
+$('center-map').addEventListener('click', () => {
+  centerMap();
+  if (mode !== 'edit') followPlayer(activeState());
+  renderBoard(activeState());
 });
 
 document.querySelectorAll('[data-brush]').forEach(button => {
@@ -199,6 +288,7 @@ function move(direction) {
   if (next === manual) return;
   undo.push(manual);
   manual = next;
+  followPlayer(manual);
   renderMap();
 }
 
@@ -215,11 +305,13 @@ document.addEventListener('keydown', event => {
 $('undo').addEventListener('click', () => {
   if (!undo.length) return;
   manual = undo.pop();
+  followPlayer(manual);
   renderMap();
 });
 $('reset-play').addEventListener('click', () => {
   manual = map.initial;
   undo = [];
+  followPlayer(manual);
   renderMap();
 });
 
@@ -272,7 +364,7 @@ function drawChart() {
 function renderTraining() {
   const episodes = trainer?.episodes ?? 0;
   const best = trainer?.best;
-  const problem = validate(map);
+  const problem = validate(map) || trainingProblem;
   const paused = !running && target > episodes;
   const status = running ? '训练中' : paused ? '已暂停' : episodes ? '批次完成' : '待训练';
   const pill = $('train-status');
@@ -301,7 +393,8 @@ function trainFrame() {
   if (!running) return;
   const deadline = performance.now() + 9;
   do {
-    trainer.episode();
+    attempt ??= trainer.attempt();
+    if (attempt.next().done) attempt = null;
   } while (trainer.episodes < target && performance.now() < deadline);
   if (trainer.episodes >= target) running = false;
   renderTraining();
@@ -313,7 +406,15 @@ $('train').addEventListener('click', () => {
   else {
     if (validate(map)) return;
     if (mode === 'replay') setMode('edit');
-    trainer ??= new Trainer(map);
+    if (!trainer) {
+      const field = trainingMap(map.tiles, area);
+      if (!field) {
+        trainingProblem = '摆放范围超过 40,000 格训练区。请缩小关卡范围后再试。';
+        renderTraining();
+        return;
+      }
+      trainer = new Trainer(field);
+    }
     if (trainer.episodes >= target) target = trainer.episodes + Number($('budget').value);
     running = true;
     frame = requestAnimationFrame(trainFrame);
@@ -323,6 +424,7 @@ $('train').addEventListener('click', () => {
 $('clear-training').addEventListener('click', () => {
   pauseTraining();
   trainer = null;
+  attempt = null;
   target = 0;
   if (mode === 'replay') setMode('edit');
   else renderTraining();
@@ -333,6 +435,7 @@ $('replay').addEventListener('click', () => {
   let index = 0;
   mode = 'replay';
   replayState = map.initial;
+  followPlayer(replayState);
 
   function tick() {
     replayMessage = 'AI 回放 · ' + index + ' / ' + path.length + ' 步';
@@ -346,6 +449,7 @@ $('replay').addEventListener('click', () => {
     renderMap();
     playback = setTimeout(() => {
       replayState = step(map, replayState, path[index]);
+      if (!gesture?.pan) followPlayer(replayState);
       index++;
       tick();
     }, 115);
@@ -379,9 +483,10 @@ function dialogError(message) {
 }
 
 $('help').addEventListener('click', () => {
-  openDialog('使用说明', '<p>在工作台上选择工具，再点击或拖动绘制。放置一个玩家，并为每个箱子放置一个目标。</p>' +
+  openDialog('使用说明', '<p>地图从空白开始，按住鼠标右键拖动可向四周平移。选好工具后，用左键点击或拖动绘制。</p>' +
+    '<p>放置一个玩家，并为每个箱子放置一个目标。点击「回到起点」可回到玩家附近。</p>' +
     '<p>点「手动试玩」，用方向键、WASD 或屏幕方向按钮移动。每次只能推动一个箱子。</p>' +
-    '<p>点「开始训练」。AI 从原始摆放反复尝试，用 Q-learning 更新每种局面的推箱选择。通关后可回放本次训练找到的最佳路线。</p>' +
+    '<p>AI 用 Q-learning 反复练习。训练区包含已绘制的地图和外围三格空地，最多 40,000 格。找到通关路线后即可回放。</p>' +
     '<p>地图会保存在当前浏览器。修改地图会清空这张地图的训练进度。</p>',
   [actionButton('知道了', 'primary', () => dialog.close())]);
 });
@@ -390,54 +495,44 @@ $('levels').addEventListener('click', () => {
   openDialog('选择示例地图', '<div class="level-list"></div>');
   ['双箱练习 · 10 × 8', '单箱入门 · 8 × 6', '三箱挑战 · 11 × 9'].forEach((title, i) => {
     $('dialog-body').firstElementChild.append(actionButton(title, '', () => {
-      changeMap([...examples[i]]);
+      changeMap(fromRows(examples[i]), true);
       dialog.close();
     }));
   });
 });
 
 $('new-map').addEventListener('click', () => {
-  openDialog('新建地图', '<div class="map-dimensions"><label>宽 <input id="new-width" type="number" min="5" max="16" value="10" required></label>' +
-    '<label>高 <input id="new-height" type="number" min="5" max="16" value="8" required></label></div><p>新地图会预置一圈墙，替换当前地图。</p>',
-  [actionButton('创建', 'primary', () => {
-    const width = $('new-width').valueAsNumber;
-    const height = $('new-height').valueAsNumber;
-    if (!$('new-width').checkValidity() || !$('new-height').checkValidity()) {
-      dialogError('宽和高都必须是 5 至 16 的整数。');
-      return;
-    }
-    const border = '#'.repeat(width);
-    const floor = '#' + ' '.repeat(width - 2) + '#';
-    changeMap(Array.from({ length: height }, (_, i) => i === 0 || i === height - 1 ? border : floor));
+  openDialog('新建空白地图', '<p>新地图将替换当前地图。</p>', [actionButton('创建空白地图', 'primary', () => {
+    changeMap(new Map(), true);
     dialog.close();
   })]);
 });
 
 $('map-code').addEventListener('click', () => {
-  openDialog('导入 / 导出地图', '<p id="symbols"># 墙 · 空格 地板 · . 目标 · $ 箱子 · @ 玩家 · * 目标上的箱子 · + 目标上的玩家</p>' +
+  openDialog('导入 / 导出地图', '<p>支持坐标 JSON 和旧版字符地图。</p><p id="symbols"># 墙 · 空格 地板 · . 目标 · $ 箱子 · @ 玩家 · * 目标上的箱子 · + 目标上的玩家</p>' +
     '<textarea id="map-text" aria-label="地图文本" aria-describedby="symbols" spellcheck="false" wrap="off"></textarea>',
   [
     actionButton('下载当前地图', 'outline plain', () => {
-      const url = URL.createObjectURL(new Blob([rows.join('\n') + '\n'], { type: 'text/plain' }));
+      const url = URL.createObjectURL(new Blob([writeWorld(map.tiles) + '\n'], { type: 'application/json' }));
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'sokoban-map.txt';
+      link.download = 'sokoban-map.json';
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }),
     actionButton('导入文本', 'primary', () => {
       try {
-        changeMap(readMap($('map-text').value));
+        changeMap(readWorld($('map-text').value), true);
         dialog.close();
       } catch (error) {
         dialogError(error.message);
       }
     }),
   ]);
-  $('map-text').value = rows.join('\n');
+  $('map-text').value = writeWorld(map.tiles);
 });
 
-buildBoard();
+centerMap();
 renderMap();
 renderTraining();
 
