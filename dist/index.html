@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="绘制自定义地图，手动试玩，观察 AI 通过强化学习掌握推箱子。">
+  <meta name="theme-color" content="#111715">
+  <title>推箱子实验室</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="engine.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <div class="brand"><span class="brand-icon" aria-hidden="true">▦</span>推箱子实验室</div>
+      <button class="outline docs" id="help" type="button"><span aria-hidden="true">ⓘ</span> 使用说明</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="eyebrow"><span></span>SOKOBAN LAB</div>
+      <h1>推箱子<span>实验室</span></h1>
+      <p>画一张地图，亲自挑战，再看看 AI 如何学会推箱子。</p>
+    </section>
+
+    <div class="workspace">
+      <section class="panel map-panel" aria-labelledby="map-title">
+        <div class="panel-heading">
+          <div>
+            <h2 id="map-title">关卡工作台</h2>
+            <div class="secondary" id="map-info"></div>
+          </div>
+          <div class="modes" aria-label="地图模式">
+            <button id="edit-mode" aria-pressed="true" type="button">编辑地图</button>
+            <button id="play-mode" aria-pressed="false" type="button">手动试玩</button>
+          </div>
+        </div>
+
+        <div class="map-toolbar" id="edit-tools">
+          <div class="brushes" role="group" aria-label="绘图工具">
+            <button type="button" data-brush="#" aria-pressed="true"><i class="sample wall"></i>墙</button>
+            <button type="button" data-brush="." aria-pressed="false"><i class="sample goal"></i>目标</button>
+            <button type="button" data-brush="$" aria-pressed="false"><i class="sample crate"></i>箱子</button>
+            <button type="button" data-brush="@" aria-pressed="false"><i class="sample player"></i>玩家</button>
+            <button type="button" data-brush=" " aria-pressed="false"><i class="sample eraser"></i>橡皮</button>
+          </div>
+        </div>
+        <div class="map-toolbar play-tools" id="play-tools" hidden>
+          <div class="move-count" id="move-count"></div>
+          <div class="tools-group"><button class="plain" id="undo" type="button">↶ 撤销</button><button class="plain" id="reset-play" type="button">↻ 重开</button></div>
+        </div>
+
+        <div class="stage">
+          <div class="board" id="board" role="group" aria-label="推箱子地图"></div>
+        </div>
+
+        <div class="map-footer">
+          <div class="map-note" id="map-note" role="status"></div>
+          <div class="tools-group" id="map-actions">
+            <button class="plain" id="levels" type="button">示例</button>
+            <button class="plain" id="new-map" type="button">新建</button>
+            <button class="plain" id="map-code" type="button">导入 / 导出</button>
+          </div>
+          <div class="dpad" id="dpad" aria-label="试玩方向键" hidden>
+            <button data-dir="3" aria-label="向左" type="button">←</button><button data-dir="0" aria-label="向上" type="button">↑</button>
+            <button data-dir="2" aria-label="向下" type="button">↓</button><button data-dir="1" aria-label="向右" type="button">→</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel train-panel" aria-labelledby="train-title">
+        <div class="panel-heading">
+          <div><h2 id="train-title">AI 训练</h2><div class="secondary">Q-learning · 浏览器本地运行</div></div>
+          <div class="status-pill" id="train-status" role="status"><span></span><b>待训练</b></div>
+        </div>
+
+        <div class="stats">
+          <div><span>训练回合</span><strong id="episodes">0</strong></div>
+          <div><span>近 100 局胜率</span><strong id="rate">—</strong></div>
+          <div><span>最佳推箱次数</span><strong id="best">—</strong></div>
+        </div>
+
+        <div class="chart-section">
+          <div class="chart-title"><h3>学习曲线</h3><span><i></i>近期胜率</span></div>
+          <div class="chart-area">
+            <div class="y-labels" aria-hidden="true"><span>100%</span><span>50%</span><span>0%</span></div>
+            <div class="plot">
+              <canvas id="chart" role="img" aria-label="训练胜率曲线"></canvas>
+              <p id="chart-empty">开始训练后显示胜率</p>
+            </div>
+            <div class="x-labels" aria-hidden="true"><span id="chart-start">0</span><span id="chart-end">回合</span></div>
+          </div>
+        </div>
+
+        <div class="training-options">
+          <label for="budget">每批回合数</label>
+          <select id="budget"><option value="100">100 回合</option><option value="500" selected>500 回合</option><option value="2000">2,000 回合</option><option value="5000">5,000 回合</option></select>
+        </div>
+        <div class="train-actions">
+          <button class="primary" id="train" type="button"><span aria-hidden="true">▶</span><b>开始训练</b></button>
+          <button class="outline square" id="clear-training" type="button" title="清除训练" aria-label="清除训练" disabled>↻</button>
+        </div>
+        <button class="outline replay" id="replay" type="button" disabled><span aria-hidden="true">▷</span> 回放最佳通关</button>
+        <div class="training-note" id="training-note">训练完成后，可以回放 AI 找到的最佳路线。</div>
+      </section>
+    </div>
+
+    <footer><span>将所有箱子推到目标点即可通关。</span><span><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> 或 <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> 移动</span></footer>
+  </main>
+
+  <dialog id="dialog" aria-labelledby="dialog-title">
+    <form method="dialog" class="dialog-inner">
+      <div class="dialog-heading"><h2 id="dialog-title"></h2><button class="plain" value="cancel" formnovalidate aria-label="关闭">✕</button></div>
+      <div id="dialog-body"></div>
+      <p id="dialog-error" role="alert" hidden></p>
+      <div id="dialog-actions" class="dialog-actions"></div>
+    </form>
+  </dialog>
+</body>
+</html>
