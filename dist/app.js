@@ -54,6 +54,8 @@ let nextWatchAt = 0;
 let playback = 0;
 let replayState = null;
 let replayMessage = '';
+let listedRoutes = null;
+let listedCount = 0;
 let gesture = null;
 let camera = { x: 0.5, y: 0.5 };
 let visibleArea = '';
@@ -190,6 +192,7 @@ function renderMap() {
   $('edit-tools').hidden = !editing;
   $('play-tools').hidden = !playing;
   $('watch-tools').hidden = !watching;
+  $('stop-replay').hidden = mode !== 'replay' || !playback;
   $('map-actions').hidden = !editing;
   $('dpad').hidden = !playing;
   $('undo').disabled = !undo.length;
@@ -314,6 +317,10 @@ function selectLevel(index) {
   if (!library.entries[index] || index === library.index) return;
   stopActivity();
   if (trainer || trainingProblem) sessions.set(level, { trainer, trainingProblem, attempt, target });
+  activateLevel(index);
+}
+
+function activateLevel(index) {
   library.index = index;
   level = library.entries[index];
   const session = sessions.get(level);
@@ -324,6 +331,18 @@ function selectLevel(index) {
   saveLevels();
   renderLevelPicker();
   loadBoard(true);
+}
+
+function blankLevel(name) {
+  return { name, tiles: new Map(), chainPush: false };
+}
+
+function deleteLevel() {
+  stopActivity();
+  sessions.delete(level);
+  library.entries.splice(library.index, 1);
+  if (!library.entries.length) library.entries.push(blankLevel('自制关卡 1'));
+  activateLevel(Math.min(library.index, library.entries.length - 1));
 }
 
 function addLevels(entries) {
@@ -691,6 +710,7 @@ function renderTraining() {
   $('budget').disabled = running || paused;
   $('clear-training').disabled = !trainer || playback !== 0 || recording;
   $('replay').disabled = !best || running || playback !== 0 || recording;
+  renderPartialRoutes(best);
   const demoLength = level.demonstration?.length ?? 0;
   $('demo-summary').textContent = demoLength ? '已保存 ' + demoLength + ' 步 · 每两回合使用一次' : '演示几步，帮 AI 练习下一步。';
   $('record-demo').textContent = demoLength ? '重录示范' : '示范几步';
@@ -702,9 +722,36 @@ function renderTraining() {
   if (problem) note = problem;
   else if (running || paused) note = '本批目标为第 ' + number.format(target) + ' 回合，切换关卡时会暂停。';
   else if (best) note = '已通关 ' + number.format(trainer.successes) + ' 局 · 最佳路线移动 ' + best.path.length + ' 步';
-  else if (episodes) note = '本轮尚未找到通关路线。可以继续训练，或用手动试玩检查地图。';
+  else if (episodes) note = '尚未通关，可以查看目前覆盖最多的路线。';
   $('training-note').textContent = note;
   drawChart();
+}
+
+function renderPartialRoutes(best) {
+  const partial = best ? null : trainer?.partial;
+  const routes = partial?.routes ?? null;
+  const count = routes?.size ?? 0;
+  $('partial-controls').hidden = !count;
+  if (!count) {
+    listedRoutes = null;
+    listedCount = 0;
+    $('partial-route').replaceChildren();
+    return;
+  }
+  if (routes !== listedRoutes || count !== listedCount) {
+    const select = $('partial-route');
+    if (routes !== listedRoutes) select.replaceChildren();
+    const options = [];
+    for (let i = select.length; i < count; i++) options.push(new Option('路线 ' + number.format(i + 1), i));
+    select.append(...options);
+    listedRoutes = routes;
+    listedCount = count;
+  }
+  const summary = '覆盖 ' + partial.covered + ' / ' + map.goals.size + ' 个目标 · ' +
+    number.format(partial.moves) + ' 步 · ' + number.format(count) + ' 条并列路线';
+  if ($('partial-summary').textContent !== summary) $('partial-summary').textContent = summary;
+  $('play-partial').disabled = running || playback !== 0 || recording;
+  $('play-sequence').disabled = $('play-partial').disabled || count < 2;
 }
 
 function toWorldState(state) {
@@ -811,34 +858,65 @@ $('clear-training').addEventListener('click', () => {
   }
 });
 $('replay').addEventListener('click', () => {
-  if (!trainer?.best || running || playback) return;
-  const path = trainer.best.path;
-  let index = 0;
+  if (trainer?.best) replayRoutes([trainer.best]);
+});
+$('play-partial').addEventListener('click', () => {
+  const route = Array.from(trainer?.partial.routes.values() ?? [])[$('partial-route').selectedIndex];
+  if (route) replayRoutes([route], $('partial-route').selectedIndex + 1);
+});
+$('play-sequence').addEventListener('click', () => {
+  if (trainer?.partial.routes.size) replayRoutes([...trainer.partial.routes.values()], 1);
+});
+$('stop-replay').addEventListener('click', () => {
+  clearTimeout(playback);
+  playback = 0;
+  replayMessage = '已停止回放';
+  renderMap();
+  renderTraining();
+});
+
+function replayRoutes(routes, firstNumber = 0) {
+  if (running || playback || recording) return;
   mode = 'replay';
-  replayState = map.initial;
-  followPlayer(replayState);
+  let routeIndex = 0;
+  let index = 0;
+
+  function startRoute() {
+    replayState = map.initial;
+    index = 0;
+    followPlayer(replayState);
+    tick();
+  }
 
   function tick() {
-    replayMessage = 'AI 回放 · ' + index + ' / ' + path.length + ' 步';
+    const { path } = routes[routeIndex];
+    const title = firstNumber ? '路线 ' + number.format(firstNumber + routeIndex) : 'AI 回放';
     if (index === path.length) {
-      replayMessage = 'AI 通关 · 移动 ' + index + ' 步 · 推箱 ' + replayState.pushes + ' 次';
-      playback = 0;
+      replayMessage = won(map, replayState) ? 'AI 通关 · 移动 ' + index + ' 步 · 推箱 ' + replayState.pushes + ' 次' :
+        title + ' · ' + index + ' 步 · 覆盖 ' + placed(map, replayState) + ' / ' + map.goals.size + ' 个目标';
+      playback = routeIndex + 1 < routes.length ? setTimeout(() => {
+        routeIndex++;
+        startRoute();
+      }, 650) : 0;
       renderMap();
       renderTraining();
       return;
     }
-    renderMap();
+    replayMessage = title + ' · ' + index + ' / ' + path.length + ' 步';
     playback = setTimeout(() => {
       replayState = step(map, replayState, path[index]);
       if (!gesture?.pan) followPlayer(replayState);
       index++;
       tick();
     }, 115);
+    renderMap();
   }
 
-  tick();
+  startRoute();
   renderTraining();
-});
+  const view = board.getBoundingClientRect();
+  if (view.top < 0 || view.top >= window.innerHeight) board.scrollIntoView({ block: 'center' });
+}
 new ResizeObserver(drawChart).observe($('chart'));
 
 function actionButton(label, kind, handler) {
@@ -855,7 +933,7 @@ function openDialog(title, content, actions = []) {
   $('dialog-body').innerHTML = content;
   $('dialog-error').hidden = true;
   $('dialog-actions').replaceChildren(...actions);
-  dialog.showModal();
+  if (!dialog.open) dialog.showModal();
 }
 
 function dialogError(message) {
@@ -897,10 +975,51 @@ $('levels').addEventListener('click', () => {
 $('new-map').addEventListener('click', () => {
   openDialog('新建关卡', '<label class="level-name">关卡名称 <input id="level-name" maxlength="40"></label>', [actionButton('创建空白关卡', 'primary', () => {
     const name = $('level-name').value.trim() || '自制关卡 ' + (library.entries.length + 1);
-    addLevels([{ name, tiles: new Map(), chainPush: false }]);
+    addLevels([blankLevel(name)]);
     dialog.close();
   })]);
 });
+
+function confirmSaveChange(deleting) {
+  const verb = deleting ? '删除' : '清空';
+  openDialog(verb + '存档', '<p id="save-confirm"></p>', [
+    actionButton('返回', 'outline plain', manageSave),
+    actionButton('确认' + verb, 'primary danger', () => {
+      if (deleting) deleteLevel();
+      else changeMap(new Map(), true, false, [], null);
+      dialog.close();
+    }),
+  ]);
+  $('save-confirm').textContent = deleting ? '删除「' + level.name + '」及其地图、示范和训练进度？' :
+    '将「' + level.name + '」恢复成空白地图？名称会保留，规则、示范和训练进度会重置。';
+}
+
+function manageSave() {
+  const saveName = actionButton('保存名称', 'primary', () => {
+    const name = $('level-name').value.trim();
+    if (!name) return dialogError('请输入关卡名称。');
+    level.name = name;
+    saveLevels();
+    renderLevelPicker();
+    dialog.close();
+  });
+  openDialog('管理存档', '<label class="level-name">关卡名称 <input id="level-name" maxlength="40"></label>' +
+    '<div class="save-actions"></div>', [saveName]);
+  const input = $('level-name');
+  input.value = level.name;
+  input.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.isComposing) return;
+    event.preventDefault();
+    saveName.click();
+  });
+  $('dialog-body').querySelector('.save-actions').append(
+    actionButton('清空为白图', 'outline', () => confirmSaveChange(false)),
+    actionButton('删除存档', 'outline', () => confirmSaveChange(true)),
+  );
+  input.focus();
+}
+
+$('manage-level').addEventListener('click', manageSave);
 
 $('map-code').addEventListener('click', () => {
   openDialog('导入 / 导出地图', '<p>支持坐标 JSON 和旧版字符地图。</p><p id="symbols"># 墙 · 空格 地板 · . 目标 · $ 箱子 · @ 玩家 · * 目标上的箱子 · + 目标上的玩家</p>' +

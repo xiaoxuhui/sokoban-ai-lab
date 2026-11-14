@@ -428,6 +428,7 @@
       this.recent = [];
       this.history = [];
       this.best = won(map, map.initial) ? { path: [], pushes: 0 } : null;
+      this.partial = { covered: -1, moves: Infinity, routes: new Map() };
       this.last = map.initial;
       this.state = map.initial;
       this.demonstration = null;
@@ -440,10 +441,12 @@
       const map = this.map;
       let state = map.initial;
       const trace = [];
+      const milestones = [];
       for (const direction of directions) {
         const next = step(map, state, direction);
         if (next === state || won(map, state)) return false;
         if (next.pushes > state.pushes) {
+          milestones.push({ state: next, length: next.moves });
           const { key, actions } = choices(map, state, this.distances);
           const box = map.adjacent(state.player, direction);
           const action = actions.find(candidate => candidate.box === box && candidate.direction === direction);
@@ -451,7 +454,7 @@
         }
         state = next;
       }
-      this.demonstration = directions.length ? { directions: directions.slice(), state, trace } : null;
+      this.demonstration = directions.length ? { directions: directions.slice(), state, trace, milestones } : null;
       this.guidedStart = this.episodes;
       this.guided = false;
       this.state = map.initial;
@@ -499,16 +502,30 @@
       for (const _ of this.attempt()) { /* Complete the episode synchronously. */ }
     }
 
+    keepPartial(state, path, length = path.length) {
+      if (this.best || won(this.map, state)) return;
+      const covered = placed(this.map, state);
+      const previous = this.partial;
+      if (covered < previous.covered || (covered === previous.covered && length > previous.moves)) return;
+      if (covered > previous.covered || length < previous.moves) {
+        this.partial = { covered, moves: length, routes: new Map() };
+      }
+      const prefix = path.slice(0, length);
+      this.partial.routes.set(prefix.join(''), { path: prefix, pushes: state.pushes });
+    }
+
     *attempt() {
       const map = this.map;
       let state = this.state = map.initial;
       let path = [];
       let trace = [];
+      this.keepPartial(state, path);
       this.guided = Boolean(this.demonstration && (this.episodes - this.guidedStart) % 2 === 0);
       if (this.guided) {
         const opening = this.demonstration;
         path = opening.directions.slice();
         trace = opening.trace.slice();
+        for (const point of opening.milestones) this.keepPartial(point.state, path, point.length);
         state = this.state = opening.state;
         yield { from: map.initial, directions: opening.directions, demonstration: true };
       }
@@ -538,6 +555,7 @@
         this.learn(current.key, action, learned);
         trace.push([current.key, action, reward]);
         state = this.state = nextState;
+        this.keepPartial(state, path);
         current = next;
         yield { from: beforePush, directions: walking };
       }
@@ -563,6 +581,7 @@
         if (!this.best || state.pushes < this.best.pushes ||
             (state.pushes === this.best.pushes && path.length < this.best.path.length)) {
           this.best = { path, pushes: state.pushes };
+          this.partial.routes.clear();
         }
       }
       this.last = state;

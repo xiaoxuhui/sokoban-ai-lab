@@ -47,9 +47,10 @@ h2 { margin: 0; font-size: 19px; letter-spacing: .025em; line-height: 1.35; }
 .modes button[aria-pressed="true"] { background: #31402f; color: var(--green); }
 .modes button:hover { color: var(--green); }
 .map-toolbar { margin-bottom: 12px; }
-.level-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) 34px 34px; align-items: center; gap: 6px; margin-bottom: 12px; color: var(--muted); font-size: 12px; }
+.level-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) 34px 34px auto; align-items: center; gap: 6px; margin-bottom: 12px; color: var(--muted); font-size: 12px; }
 .level-controls select { width: 100%; min-width: 0; min-height: 32px; text-overflow: ellipsis; }
 .level-controls button { height: 32px; font-size: 21px; line-height: 1; }
+.level-controls #manage-level { font-size: 12px; padding: 0 8px; white-space: nowrap; }
 .brushes { display: flex; flex-wrap: wrap; gap: 6px; }
 .brushes button { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; background: #1d2821; border: 1px solid #334238; border-radius: 8px; padding: 6px 10px; color: var(--muted); }
 .brushes button[aria-pressed="true"] { background: #2c3c29; border-color: #729a56; color: var(--green); }
@@ -149,6 +150,11 @@ select { padding: 6px 8px; }
 .square { font-size: 20px; color: var(--muted); }
 .replay { width: 100%; margin-top: 8px; padding: 8px; font-size: 13px; }
 .replay span { color: var(--green); margin-right: 3px; }
+.partial-controls { display: grid; gap: 7px; margin-top: 9px; color: var(--muted); font-size: 12px; }
+.partial-controls .outline, .save-actions .outline { padding: 7px 9px; }
+.save-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
+.danger { background: #a63a39; color: #fff6f4; }
+.danger:not(:disabled):hover { background: #bb4845; }
 .training-note { font-size: 11px; line-height: 1.55; color: var(--muted); margin-top: 9px; min-height: 17px; }
 footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 9px; color: var(--faint); padding: 15px 0 23px; font-size: 11px; }
 kbd { background: #1d2720; border: 1px solid #344039; border-radius: 4px; padding: 1px 4px; font-family: ui-monospace, Consolas, monospace; }
