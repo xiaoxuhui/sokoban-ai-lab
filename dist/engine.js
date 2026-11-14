@@ -25,7 +25,7 @@
     return rows;
   }
 
-  function compile(rows) {
+  function compile(rows, chainPush = false) {
     const width = rows[0].length;
     const tiles = rows.join('');
     const goals = new Set();
@@ -42,7 +42,7 @@
       const cell = y * width + x;
       return x < 0 || x >= width || y < 0 || y >= rows.length || tiles[cell] === '#' ? -1 : cell;
     }));
-    return { width, tiles, goals, next, neighbor: (cell, direction) => next[cell][direction], initial: { player, boxes, moves: 0, pushes: 0 } };
+    return { width, tiles, goals, next, chainPush, neighbor: (cell, direction) => next[cell][direction], initial: { player, boxes, moves: 0, pushes: 0 } };
   }
 
   const key = (x, y) => x + ',' + y;
@@ -56,9 +56,9 @@
     return tiles;
   }
 
-  function readWorld(text) {
-    if (!text.trim()) return new Map();
-    if (!text.trimStart().startsWith('{')) return fromRows(readMap(text));
+  function readLevel(text) {
+    if (!text.trim()) return { tiles: new Map(), chainPush: false };
+    if (!text.trimStart().startsWith('{')) return { tiles: fromRows(readMap(text)), chainPush: false };
     const data = JSON.parse(text);
     if (data?.version !== 1 || !Array.isArray(data.tiles)) throw new Error('地图 JSON 须包含 version: 1 和 tiles 数组。');
     const tiles = new Map();
@@ -78,15 +78,19 @@
       }
       tiles.set(cell, tile);
     }
-    return tiles;
+    return { tiles, chainPush: data.chainPush === true };
   }
 
-  function writeWorld(tiles) {
+  function readWorld(text) {
+    return readLevel(text).tiles;
+  }
+
+  function writeWorld(tiles, chainPush = false) {
     const lines = [...tiles].map(([cell, tile]) => JSON.stringify([...point(cell), tile]));
-    return '{\n  "version": 1,\n  "tiles": [' + (lines.length ? '\n    ' + lines.join(',\n    ') + '\n  ' : '') + ']\n}';
+    return '{\n  "version": 1,\n  "chainPush": ' + chainPush + ',\n  "tiles": [' + (lines.length ? '\n    ' + lines.join(',\n    ') + '\n  ' : '') + ']\n}';
   }
 
-  function world(tiles) {
+  function world(tiles, chainPush = false) {
     const goals = new Set();
     const boxes = [];
     let player = -1;
@@ -96,7 +100,7 @@
       if ('@+'.includes(tile)) player = cell;
     }
     return {
-      tiles, goals, initial: { player, boxes, moves: 0, pushes: 0 },
+      tiles, goals, chainPush, initial: { player, boxes, moves: 0, pushes: 0 },
       neighbor(cell, direction) {
         const [x, y] = point(cell);
         const [dx, dy] = directions[direction];
@@ -121,7 +125,7 @@
     return { left, top, right, bottom };
   }
 
-  function trainingMap(tiles, area) {
+  function trainingMap(tiles, area, chainPush = false) {
     const { left, top, right, bottom } = area;
     const margin = 3;
     const width = right - left + 1 + margin * 2;
@@ -132,7 +136,7 @@
       const [x, y] = point(cell);
       rows[y - top + margin][x - left + margin] = tile;
     }
-    return compile(rows.map(row => row.join('')));
+    return compile(rows.map(row => row.join('')), chainPush);
   }
 
   function validate(map) {
@@ -150,14 +154,25 @@
     return state.boxes.length > 0 && placed(map, state) === state.boxes.length;
   }
 
+  function pushLanding(map, first, direction, occupied, distances) {
+    let next = map.neighbor(first, direction);
+    while (next !== -1 && occupied.has(next)) {
+      if (!map.chainPush || (distances && distances[next] < 0)) return -1;
+      next = map.neighbor(next, direction);
+    }
+    if (next !== -1 && distances && distances[next] < 0) return -1;
+    return next;
+  }
+
   function step(map, state, direction) {
     if (state.player === -1 || !directions[direction]) return state;
     const player = map.neighbor(state.player, direction);
-    if (player < 0) return state;
+    if (player === -1) return state;
     const box = state.boxes.indexOf(player);
     if (box < 0) return { ...state, player, moves: state.moves + 1 };
-    const landing = map.neighbor(player, direction);
-    if (landing < 0 || state.boxes.includes(landing)) return state;
+    const landing = pushLanding(map, player, direction, new Set(state.boxes));
+    if (landing === -1) return state;
+    // Every intermediate square still contains a box after the chain moves.
     const boxes = [...state.boxes];
     boxes[box] = landing;
     if (typeof landing === 'number') boxes.sort((a, b) => a - b);
@@ -203,11 +218,11 @@
     const area = reach(map, state);
     const actions = [];
     state.boxes.forEach(box => {
-      map.next[box].forEach((to, direction) => {
+      map.next[box].forEach((_, direction) => {
         const from = map.next[box][(direction + 2) % 4];
-        if (to >= 0 && from >= 0 && area.previous[from] >= 0 && !area.boxes.has(to) && distances[to] >= 0) {
-          actions.push({ box, to, from, direction, id: box * 4 + direction });
-        }
+        if (from < 0 || area.previous[from] < 0) return;
+        const to = pushLanding(map, box, direction, area.boxes, distances);
+        if (to >= 0) actions.push({ box, to, from, direction, id: box * 4 + direction });
       });
     });
     return { area, actions, key: `${area.first}:${state.boxes.join(',')}` };
@@ -318,7 +333,7 @@
     }
   }
 
-  const api = { examples, readMap, fromRows, readWorld, writeWorld, world, bounds, key, point, trainingMap, compile, validate, placed, won, step, Trainer };
+  const api = { examples, readMap, fromRows, readLevel, readWorld, writeWorld, world, bounds, key, point, trainingMap, compile, validate, placed, won, step, Trainer };
   if (typeof module === 'object') module.exports = api;
   else root.Sokoban = api;
 })(globalThis);

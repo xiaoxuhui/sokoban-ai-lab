@@ -6,9 +6,9 @@
   <meta name="description" content="绘制自定义地图，手动试玩，观察 AI 通过强化学习掌握推箱子。">
   <meta name="theme-color" content="#111715">
   <title>推箱子实验室</title>
-  <link rel="stylesheet" href="style.css?v=2">
-  <script src="engine.js?v=2" defer></script>
-  <script src="app.js?v=2" defer></script>
+  <link rel="stylesheet" href="style.css?v=3">
+  <script src="engine.js?v=3" defer></script>
+  <script src="app.js?v=3" defer></script>
 </head>
 <body>
   <header class="top">
@@ -38,6 +38,13 @@
           </div>
         </div>
 
+        <div class="level-controls">
+          <label for="current-level">当前关卡</label>
+          <select id="current-level"></select>
+          <button class="outline" id="prev-level" type="button" aria-label="上一关" title="上一关">‹</button>
+          <button class="outline" id="next-level" type="button" aria-label="下一关" title="下一关">›</button>
+        </div>
+
         <div class="map-toolbar" id="edit-tools">
           <div class="brushes" role="group" aria-label="绘图工具">
             <button type="button" data-brush="#" aria-pressed="true"><i class="sample wall"></i>墙</button>
@@ -60,8 +67,8 @@
         <div class="map-footer">
           <div class="map-note" id="map-note" role="status"></div>
           <div class="tools-group" id="map-actions">
-            <button class="plain" id="levels" type="button">示例</button>
-            <button class="plain" id="new-map" type="button">新建</button>
+            <button class="plain" id="levels" type="button">添加示例</button>
+            <button class="plain" id="new-map" type="button">新建关卡</button>
             <button class="plain" id="map-code" type="button">导入 / 导出</button>
           </div>
           <div class="dpad" id="dpad" aria-label="试玩方向键" hidden>
@@ -95,6 +102,9 @@
           </div>
         </div>
 
+        <div class="training-options">
+          <label class="rule-toggle"><input id="chain-push" type="checkbox"> 允许连推多个箱子</label>
+        </div>
         <div class="training-options">
           <label for="budget">每批回合数</label>
           <select id="budget"><option value="100">100 回合</option><option value="500" selected>500 回合</option><option value="2000">2,000 回合</option><option value="5000">5,000 回合</option></select>

@@ -1,22 +1,33 @@
 'use strict';
 
-const { examples, fromRows, readWorld, writeWorld, world, bounds, key, point, trainingMap, validate, placed, won, step, Trainer } = Sokoban;
+const { examples, fromRows, readLevel, writeWorld, world, bounds, key, point, trainingMap, validate, placed, won, step, Trainer } = Sokoban;
 const $ = id => document.getElementById(id);
 const board = $('board');
 const grid = $('grid');
 const dialog = $('dialog');
-const storageKey = 'sokoban-lab-world-v1';
+const storageKey = 'sokoban-lab-levels-v1';
 const number = new Intl.NumberFormat('zh-CN');
 
-function loadWorld() {
+function loadLevels() {
+  let first = { name: '自制关卡 1', tiles: new Map(), chainPush: false };
   try {
-    return readWorld(localStorage.getItem(storageKey) ?? localStorage.getItem('sokoban-lab-map-v1') ?? '');
-  } catch {
-    return new Map();
-  }
+    const saved = JSON.parse(localStorage.getItem(storageKey));
+    if (Array.isArray(saved?.levels) && saved.levels.length) {
+      const entries = saved.levels.map(({ name, code }) => ({ name, ...readLevel(code) }));
+      return { entries, index: entries[saved.index] ? saved.index : 0 };
+    }
+  } catch { /* Try the previous format. */ }
+  try {
+    const code = localStorage.getItem('sokoban-lab-world-v1') ?? localStorage.getItem('sokoban-lab-map-v1') ?? '';
+    first = { ...first, ...readLevel(code) };
+  } catch { /* An empty level is available even without storage. */ }
+  return { entries: [first], index: 0 };
 }
 
-let map = world(loadWorld());
+const library = loadLevels();
+const sessions = new Map();
+let level = library.entries[library.index];
+let map = world(level.tiles, level.chainPush);
 let area = bounds(map.tiles);
 let brush = '#';
 let mode = 'edit';
@@ -168,24 +179,81 @@ function pauseTraining() {
   cancelAnimationFrame(frame);
 }
 
-function changeMap(tiles, recenter = false) {
-  pauseTraining();
-  clearTimeout(playback);
-  playback = 0;
-  trainer = null;
-  trainingProblem = '';
-  attempt = null;
-  target = 0;
-  map = world(tiles);
-  area = bounds(tiles);
+function saveLevels() {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify({
+      index: library.index,
+      levels: library.entries.map(entry => ({ name: entry.name, code: writeWorld(entry.tiles, entry.chainPush) })),
+    }));
+  } catch { /* Storage is optional. */ }
+}
+
+function renderLevelPicker() {
+  const picker = $('current-level');
+  picker.replaceChildren(...library.entries.map((entry, index) =>
+    new Option((index + 1) + ' · ' + entry.name, index)));
+  picker.value = library.index;
+  $('prev-level').disabled = library.index === 0;
+  $('next-level').disabled = library.index === library.entries.length - 1;
+}
+
+function loadBoard(recenter) {
+  map = world(level.tiles, level.chainPush);
+  area = bounds(level.tiles);
   manual = map.initial;
   undo = [];
   mode = 'edit';
-  try { localStorage.setItem(storageKey, writeWorld(tiles)); } catch { /* Storage is optional. */ }
+  $('chain-push').checked = level.chainPush;
   if (recenter) centerMap();
   renderMap();
   renderTraining();
 }
+
+function stopActivity() {
+  pauseTraining();
+  clearTimeout(playback);
+  playback = 0;
+}
+
+function selectLevel(index) {
+  if (!library.entries[index] || index === library.index) return;
+  stopActivity();
+  if (trainer || trainingProblem) sessions.set(level, { trainer, trainingProblem, attempt, target });
+  library.index = index;
+  level = library.entries[index];
+  const session = sessions.get(level);
+  trainer = session?.trainer ?? null;
+  trainingProblem = session?.trainingProblem ?? '';
+  attempt = session?.attempt ?? null;
+  target = session?.target ?? 0;
+  saveLevels();
+  renderLevelPicker();
+  loadBoard(true);
+}
+
+function addLevels(entries) {
+  const first = library.entries.length;
+  library.entries.push(...entries);
+  selectLevel(first);
+}
+
+function changeMap(tiles, recenter = false, chainPush = level.chainPush) {
+  stopActivity();
+  sessions.delete(level);
+  trainer = null;
+  trainingProblem = '';
+  attempt = null;
+  target = 0;
+  level.tiles = tiles;
+  level.chainPush = chainPush;
+  saveLevels();
+  loadBoard(recenter);
+}
+
+$('current-level').addEventListener('change', event => selectLevel(Number(event.target.value)));
+$('prev-level').addEventListener('click', () => selectLevel(library.index - 1));
+$('next-level').addEventListener('click', () => selectLevel(library.index + 1));
+$('chain-push').addEventListener('change', event => changeMap(map.tiles, false, event.target.checked));
 
 function paint(coordinate) {
   const old = map.tiles.get(coordinate) ?? ' ';
@@ -380,9 +448,9 @@ function renderTraining() {
   $('clear-training').disabled = !trainer || playback !== 0;
   $('replay').disabled = !best || running || playback !== 0;
 
-  let note = '训练完成后，可以回放 AI 找到的最佳路线。';
+  let note = '训练当前关卡，找到通关路线后即可回放。';
   if (problem) note = problem;
-  else if (running || paused) note = '本批目标为第 ' + number.format(target) + ' 回合，地图修改后会重新训练。';
+  else if (running || paused) note = '本批目标为第 ' + number.format(target) + ' 回合，切换关卡时会暂停。';
   else if (best) note = '已通关 ' + number.format(trainer.successes) + ' 局 · 最佳路线移动 ' + best.path.length + ' 步';
   else if (episodes) note = '本轮尚未找到通关路线。可以继续训练，或用手动试玩检查地图。';
   $('training-note').textContent = note;
@@ -407,7 +475,7 @@ $('train').addEventListener('click', () => {
     if (validate(map)) return;
     if (mode === 'replay') setMode('edit');
     if (!trainer) {
-      const field = trainingMap(map.tiles, area);
+      const field = trainingMap(map.tiles, area, level.chainPush);
       if (!field) {
         trainingProblem = '摆放范围超过 40,000 格训练区。请缩小关卡范围后再试。';
         renderTraining();
@@ -423,6 +491,7 @@ $('train').addEventListener('click', () => {
 });
 $('clear-training').addEventListener('click', () => {
   pauseTraining();
+  sessions.delete(level);
   trainer = null;
   attempt = null;
   target = 0;
@@ -485,25 +554,35 @@ function dialogError(message) {
 $('help').addEventListener('click', () => {
   openDialog('使用说明', '<p>地图从空白开始，按住鼠标右键拖动可向四周平移。选好工具后，用左键点击或拖动绘制。</p>' +
     '<p>放置一个玩家，并为每个箱子放置一个目标。点击「回到起点」可回到玩家附近。</p>' +
-    '<p>点「手动试玩」，用方向键、WASD 或屏幕方向按钮移动。每次只能推动一个箱子。</p>' +
+    '<p>点「手动试玩」，用方向键、WASD 或屏幕方向按钮移动。勾选「允许连推多个箱子」后，玩家和 AI 都能一步推动相邻的一整排箱子，计作一次推箱。</p>' +
     '<p>AI 用 Q-learning 反复练习。训练区包含已绘制的地图和外围三格空地，最多 40,000 格。找到通关路线后即可回放。</p>' +
-    '<p>地图会保存在当前浏览器。修改地图会清空这张地图的训练进度。</p>',
+    '<p>用关卡列表逐关训练。切换时会暂停当前训练，切回即可继续。地图和规则保存在浏览器，训练进度保留至页面关闭或刷新。修改地图或规则会清空当前关的训练进度。</p>',
   [actionButton('知道了', 'primary', () => dialog.close())]);
 });
 
 $('levels').addEventListener('click', () => {
-  openDialog('选择示例地图', '<div class="level-list"></div>');
-  ['双箱练习 · 10 × 8', '单箱入门 · 8 × 6', '三箱挑战 · 11 × 9'].forEach((title, i) => {
-    $('dialog-body').firstElementChild.append(actionButton(title, '', () => {
-      changeMap(fromRows(examples[i]), true);
+  const entries = [
+    { name: '单箱入门', tiles: fromRows(examples[1]), chainPush: false },
+    { name: '双箱练习', tiles: fromRows(examples[0]), chainPush: false },
+    { name: '三箱挑战', tiles: fromRows(examples[2]), chainPush: false },
+    { name: '连推练习', tiles: fromRows(['#########', '#@$$..  #', '#########']), chainPush: true },
+  ];
+  openDialog('添加示例关卡', '<div class="level-list"></div>', [actionButton('按顺序添加全部', 'primary', () => {
+    addLevels(entries);
+    dialog.close();
+  })]);
+  entries.forEach(entry => {
+    $('dialog-body').firstElementChild.append(actionButton(entry.name, '', () => {
+      addLevels([entry]);
       dialog.close();
     }));
   });
 });
 
 $('new-map').addEventListener('click', () => {
-  openDialog('新建空白地图', '<p>新地图将替换当前地图。</p>', [actionButton('创建空白地图', 'primary', () => {
-    changeMap(new Map(), true);
+  openDialog('新建关卡', '<label class="level-name">关卡名称 <input id="level-name" maxlength="40"></label>', [actionButton('创建空白关卡', 'primary', () => {
+    const name = $('level-name').value.trim() || '自制关卡 ' + (library.entries.length + 1);
+    addLevels([{ name, tiles: new Map(), chainPush: false }]);
     dialog.close();
   })]);
 });
@@ -513,7 +592,7 @@ $('map-code').addEventListener('click', () => {
     '<textarea id="map-text" aria-label="地图文本" aria-describedby="symbols" spellcheck="false" wrap="off"></textarea>',
   [
     actionButton('下载当前地图', 'outline plain', () => {
-      const url = URL.createObjectURL(new Blob([writeWorld(map.tiles) + '\n'], { type: 'application/json' }));
+      const url = URL.createObjectURL(new Blob([writeWorld(map.tiles, level.chainPush) + '\n'], { type: 'application/json' }));
       const link = document.createElement('a');
       link.href = url;
       link.download = 'sokoban-map.json';
@@ -522,16 +601,19 @@ $('map-code').addEventListener('click', () => {
     }),
     actionButton('导入文本', 'primary', () => {
       try {
-        changeMap(readWorld($('map-text').value), true);
+        const imported = readLevel($('map-text').value);
+        changeMap(imported.tiles, true, imported.chainPush);
         dialog.close();
       } catch (error) {
         dialogError(error.message);
       }
     }),
   ]);
-  $('map-text').value = writeWorld(map.tiles);
+  $('map-text').value = writeWorld(map.tiles, level.chainPush);
 });
 
+renderLevelPicker();
+$('chain-push').checked = level.chainPush;
 centerMap();
 renderMap();
 renderTraining();
