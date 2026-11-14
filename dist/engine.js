@@ -238,15 +238,18 @@
     const first = map.adjacent(state.player, direction);
     if (first === -1) return state;
     const occupied = new Set(state.boxes);
-    if (map.isWall(first)) {
-      const entrance = portalOn(map, state, first, opposite(direction));
+    const face = map.isWall(first) || occupied.has(first) ? portalOn(map, state, first, opposite(direction)) : -1;
+    if (face >= 0) {
+      const entrance = face;
       const player = portalExit(map, state.portalCells, entrance);
       if (player === -1 || player === state.player || occupied.has(player)) return state;
       return { ...state, player, moves: state.moves + 1 };
     }
+    if (map.isWall(first)) return state;
     if (!occupied.has(first)) return { ...state, player: first, moves: state.moves + 1 };
 
     const moved = new Map();
+    let player = first;
     let entrance = -1;
     let cargo;
     for (let box = first; ;) {
@@ -263,13 +266,22 @@
         break;
       }
       const beyond = map.adjacent(ahead, direction);
+      const forward = portalOn(map, state, box, direction);
+      if (forward >= 0 && map.isWall(beyond)) {
+        // The squeeze takes the front box. Keep the entrance face clear for the return trip.
+        moved.clear();
+        player = state.player;
+        entrance = forward;
+        cargo = ahead;
+        break;
+      }
+      const facing = portalOn(map, state, ahead, opposite(direction));
+      if (facing >= 0) {
+        entrance = facing;
+        cargo = box;
+        break;
+      }
       if (map.isWall(beyond)) {
-        entrance = portalOn(map, state, box, direction);
-        if (entrance >= 0) {
-          moved.set(box, ahead);
-          cargo = ahead;
-          break;
-        }
         // A wall portal can accept a box even when the pushing box has no portal.
         const wallEntrance = portalOn(map, state, beyond, opposite(direction));
         if (!map.chainPush && wallEntrance >= 0) {
@@ -279,7 +291,7 @@
           break;
         }
       }
-      if (!map.chainPush && portalOn(map, state, box, direction) < 0) return state;
+      if (!map.chainPush && forward < 0) return state;
       // A forward portal can push the single box immediately in front of it.
       if (!map.chainPush && occupied.has(beyond)) return state;
       moved.set(box, ahead);
@@ -290,12 +302,12 @@
     if (cargo !== undefined) {
       if (state.portalCells[entrance ^ 1] === cargo) return state;
       const landing = portalExit(map, portalCells, entrance);
-      if (landing === -1 || landing === first || boxes.includes(landing)) return state;
+      if (landing === -1 || landing === cargo || landing === player || boxes.includes(landing)) return state;
       boxes.push(landing);
       state.portalCells.forEach((cell, i) => { if (cell === cargo) portalCells[i] = landing; });
     }
     if (typeof first === 'number') boxes.sort((a, b) => a - b);
-    return { player: first, boxes, portalCells, moves: state.moves + 1, pushes: state.pushes + 1 };
+    return { player, boxes, portalCells, moves: state.moves + 1, pushes: state.pushes + 1 };
   }
 
   function reach(map, state) {
@@ -309,9 +321,10 @@
       const cell = queue[i];
       first = Math.min(first, cell);
       map.next[cell].forEach((neighbor, direction) => {
-        if (neighbor === -1 && map.portalSides.length) {
-          const wall = map.adjacent(cell, direction);
-          if (map.isWall(wall)) neighbor = portalExit(map, state.portalCells, portalOn(map, state, wall, opposite(direction)));
+        if (map.portalSides.length && (neighbor === -1 || boxes.has(neighbor))) {
+          const host = map.adjacent(cell, direction);
+          const entrance = portalOn(map, state, host, opposite(direction));
+          neighbor = portalExit(map, state.portalCells, entrance);
         }
         if (neighbor < 0 || previous[neighbor] >= 0 || boxes.has(neighbor)) return;
         previous[neighbor] = cell;
@@ -396,7 +409,8 @@
         if (next === state || won(map, state)) return false;
         if (next.pushes > state.pushes) {
           const { key, actions } = choices(map, state, this.distances);
-          const action = actions.find(candidate => candidate.box === next.player && candidate.direction === direction);
+          const box = map.adjacent(state.player, direction);
+          const action = actions.find(candidate => candidate.box === box && candidate.direction === direction);
           if (action) trace.push([key, action, this.reward(state, next, action, false)]);
         }
         state = next;
