@@ -25,7 +25,10 @@
     return rows;
   }
 
-  function compile(rows, chainPush = false) {
+  const opposite = direction => (direction + 2) % 4;
+  const portalHost = tile => tile === '#' || tile === '$' || tile === '*';
+
+  function compile(rows, chainPush = false, portals = []) {
     const width = rows[0].length;
     const tiles = rows.join('');
     const goals = new Set();
@@ -36,13 +39,21 @@
       if ('$*'.includes(tiles[i])) boxes.push(i);
       if ('@+'.includes(tiles[i])) player = i;
     }
-    const next = Array.from(tiles, (_, i) => directions.map(([dx, dy]) => {
+    const adjacent = Array.from(tiles, (_, i) => directions.map(([dx, dy]) => {
       const x = i % width + dx;
       const y = Math.floor(i / width) + dy;
       const cell = y * width + x;
-      return x < 0 || x >= width || y < 0 || y >= rows.length || tiles[cell] === '#' ? -1 : cell;
+      return x < 0 || x >= width || y < 0 || y >= rows.length ? -1 : cell;
     }));
-    return { width, tiles, goals, next, chainPush, neighbor: (cell, direction) => next[cell][direction], initial: { player, boxes, moves: 0, pushes: 0 } };
+    const isWall = cell => tiles[cell] === '#';
+    const next = adjacent.map(neighbors => neighbors.map(cell => isWall(cell) ? -1 : cell));
+    return {
+      width, tiles, goals, next, chainPush, isWall,
+      adjacent: (cell, direction) => adjacent[cell][direction],
+      neighbor: (cell, direction) => next[cell][direction],
+      portalSides: portals.map(end => end.side),
+      initial: { player, boxes, moves: 0, pushes: 0, portalCells: portals.map(end => end.cell) },
+    };
   }
 
   const key = (x, y) => x + ',' + y;
@@ -78,19 +89,41 @@
       }
       tiles.set(cell, tile);
     }
-    return { tiles, chainPush: data.chainPush === true };
+    const pairs = data.portals ?? [];
+    if (!Array.isArray(pairs) || pairs.some(pair => !Array.isArray(pair) || pair.length !== 2)) {
+      throw new Error('传送门须成对设置。');
+    }
+    const used = new Set();
+    const portals = pairs.flatMap(pair => pair.map(endpoint => {
+      if (!Array.isArray(endpoint) || endpoint.length !== 3) throw new Error('请检查传送门端点。');
+      const [x, y, side] = endpoint;
+      const cell = key(x, y);
+      const face = cell + ',' + side;
+      if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y) || !Number.isInteger(side) ||
+          !directions[side] || !portalHost(tiles.get(cell)) || used.has(face)) {
+        throw new Error('传送门须绑定在箱子或墙的边上，每条边只能绑定一个端点。');
+      }
+      used.add(face);
+      return { cell, side };
+    }));
+    return { tiles, chainPush: data.chainPush === true, portals };
   }
 
   function readWorld(text) {
     return readLevel(text).tiles;
   }
 
-  function writeWorld(tiles, chainPush = false) {
+  function writeWorld(tiles, chainPush = false, portals = []) {
     const lines = [...tiles].map(([cell, tile]) => JSON.stringify([...point(cell), tile]));
-    return '{\n  "version": 1,\n  "chainPush": ' + chainPush + ',\n  "tiles": [' + (lines.length ? '\n    ' + lines.join(',\n    ') + '\n  ' : '') + ']\n}';
+    const pairs = [];
+    for (let i = 0; i < portals.length; i += 2) {
+      pairs.push(JSON.stringify(portals.slice(i, i + 2).map(end => [...point(end.cell), end.side])));
+    }
+    const links = pairs.length ? '],\n  "portals": [\n    ' + pairs.join(',\n    ') + '\n  ]' : ']';
+    return '{\n  "version": 1,\n  "chainPush": ' + chainPush + ',\n  "tiles": [' + (lines.length ? '\n    ' + lines.join(',\n    ') + '\n  ' : '') + links + '\n}';
   }
 
-  function world(tiles, chainPush = false) {
+  function world(tiles, chainPush = false, portals = []) {
     const goals = new Set();
     const boxes = [];
     let player = -1;
@@ -99,13 +132,18 @@
       if ('$*'.includes(tile)) boxes.push(cell);
       if ('@+'.includes(tile)) player = cell;
     }
+    const adjacent = (cell, direction) => {
+      const [x, y] = point(cell);
+      const [dx, dy] = directions[direction];
+      return key(x + dx, y + dy);
+    };
+    const isWall = cell => tiles.get(cell) === '#';
     return {
-      tiles, goals, chainPush, initial: { player, boxes, moves: 0, pushes: 0 },
+      tiles, goals, chainPush, isWall, adjacent, portalSides: portals.map(end => end.side),
+      initial: { player, boxes, moves: 0, pushes: 0, portalCells: portals.map(end => end.cell) },
       neighbor(cell, direction) {
-        const [x, y] = point(cell);
-        const [dx, dy] = directions[direction];
-        const next = key(x + dx, y + dy);
-        return tiles.get(next) === '#' ? -1 : next;
+        const next = adjacent(cell, direction);
+        return isWall(next) ? -1 : next;
       },
     };
   }
@@ -125,19 +163,23 @@
     return { left, top, right, bottom };
   }
 
-  function trainingMap(tiles, area, chainPush = false) {
+  function trainingMap(tiles, area, chainPush = false, portals = []) {
     const { left, top, right, bottom } = area;
     const margin = 3;
     const width = right - left + 1 + margin * 2;
     const height = bottom - top + 1 + margin * 2;
     if (width * height > 40000) return null;
     const rows = Array.from({ length: height }, () => Array(width).fill(' '));
-    for (const [cell, tile] of tiles) {
+    const toIndex = cell => {
       const [x, y] = point(cell);
-      rows[y - top + margin][x - left + margin] = tile;
+      return (y - top + margin) * width + x - left + margin;
+    };
+    for (const [cell, tile] of tiles) {
+      const index = toIndex(cell);
+      rows[Math.floor(index / width)][index % width] = tile;
     }
     return {
-      ...compile(rows.map(row => row.join('')), chainPush),
+      ...compile(rows.map(row => row.join('')), chainPush, portals.map(end => ({ ...end, cell: toIndex(end.cell) }))),
       worldCell: cell => key(left - margin + cell % width, top - margin + Math.floor(cell / width)),
     };
   }
@@ -168,6 +210,7 @@
 
   function step(map, state, direction) {
     if (state.player === -1 || !directions[direction]) return state;
+    if (map.portalSides.length) return portalStep(map, state, direction);
     const player = map.neighbor(state.player, direction);
     if (player === -1) return state;
     const box = state.boxes.indexOf(player);
@@ -178,7 +221,81 @@
     const boxes = [...state.boxes];
     boxes[box] = landing;
     if (typeof landing === 'number') boxes.sort((a, b) => a - b);
-    return { player, boxes, moves: state.moves + 1, pushes: state.pushes + 1 };
+    return { ...state, player, boxes, moves: state.moves + 1, pushes: state.pushes + 1 };
+  }
+
+  function portalOn(map, state, cell, side) {
+    return state.portalCells.findIndex((host, i) => host === cell && map.portalSides[i] === side);
+  }
+
+  function portalExit(map, portalCells, entrance) {
+    if (entrance < 0) return -1;
+    const exit = entrance ^ 1;
+    return map.neighbor(portalCells[exit], map.portalSides[exit]);
+  }
+
+  function portalStep(map, state, direction) {
+    const first = map.adjacent(state.player, direction);
+    if (first === -1) return state;
+    const occupied = new Set(state.boxes);
+    if (map.isWall(first)) {
+      const entrance = portalOn(map, state, first, opposite(direction));
+      const player = portalExit(map, state.portalCells, entrance);
+      if (player === -1 || player === state.player || occupied.has(player)) return state;
+      return { ...state, player, moves: state.moves + 1 };
+    }
+    if (!occupied.has(first)) return { ...state, player: first, moves: state.moves + 1 };
+
+    const moved = new Map();
+    let entrance = -1;
+    let cargo;
+    for (let box = first; ;) {
+      const ahead = map.adjacent(box, direction);
+      if (ahead === -1) return state;
+      if (map.isWall(ahead)) {
+        entrance = portalOn(map, state, ahead, opposite(direction));
+        if (entrance < 0) return state;
+        cargo = box;
+        break;
+      }
+      if (!occupied.has(ahead)) {
+        moved.set(box, ahead);
+        break;
+      }
+      const beyond = map.adjacent(ahead, direction);
+      if (map.isWall(beyond)) {
+        entrance = portalOn(map, state, box, direction);
+        if (entrance >= 0) {
+          moved.set(box, ahead);
+          cargo = ahead;
+          break;
+        }
+        // A wall portal can accept a box even when the pushing box has no portal.
+        const wallEntrance = portalOn(map, state, beyond, opposite(direction));
+        if (!map.chainPush && wallEntrance >= 0) {
+          moved.set(box, ahead);
+          entrance = wallEntrance;
+          cargo = ahead;
+          break;
+        }
+      }
+      if (!map.chainPush && portalOn(map, state, box, direction) < 0) return state;
+      // A forward portal can push the single box immediately in front of it.
+      if (!map.chainPush && occupied.has(beyond)) return state;
+      moved.set(box, ahead);
+      box = ahead;
+    }
+    const boxes = state.boxes.filter(box => box !== cargo).map(box => moved.get(box) ?? box);
+    const portalCells = state.portalCells.map(cell => moved.get(cell) ?? cell);
+    if (cargo !== undefined) {
+      if (state.portalCells[entrance ^ 1] === cargo) return state;
+      const landing = portalExit(map, portalCells, entrance);
+      if (landing === -1 || landing === first || boxes.includes(landing)) return state;
+      boxes.push(landing);
+      state.portalCells.forEach((cell, i) => { if (cell === cargo) portalCells[i] = landing; });
+    }
+    if (typeof first === 'number') boxes.sort((a, b) => a - b);
+    return { player: first, boxes, portalCells, moves: state.moves + 1, pushes: state.pushes + 1 };
   }
 
   function reach(map, state) {
@@ -192,6 +309,10 @@
       const cell = queue[i];
       first = Math.min(first, cell);
       map.next[cell].forEach((neighbor, direction) => {
+        if (neighbor === -1 && map.portalSides.length) {
+          const wall = map.adjacent(cell, direction);
+          if (map.isWall(wall)) neighbor = portalExit(map, state.portalCells, portalOn(map, state, wall, opposite(direction)));
+        }
         if (neighbor < 0 || previous[neighbor] >= 0 || boxes.has(neighbor)) return;
         previous[neighbor] = cell;
         via[neighbor] = direction;
@@ -219,6 +340,7 @@
   function choices(map, state, distances) {
     const area = reach(map, state);
     const actions = [];
+    const hasPortals = map.portalSides.length > 0;
     // Extra boxes can occupy squares from which no goal is reachable.
     const spare = state.boxes.length - map.goals.size;
     const stranded = state.boxes.filter(box => distances[box] < 0).length;
@@ -226,13 +348,24 @@
       map.next[box].forEach((_, direction) => {
         const from = map.next[box][(direction + 2) % 4];
         if (from < 0 || area.previous[from] < 0) return;
+        if (hasPortals) {
+          const next = portalStep(map, { ...state, player: from }, direction);
+          if (next.pushes > state.pushes) {
+            const to = next.boxes.find(cell => !area.boxes.has(cell));
+            actions.push({ box, to, from, direction, id: box * 4 + direction });
+          }
+          return;
+        }
         const to = pushLanding(map, box, direction, area.boxes);
         if (to < 0) return;
         const nextStranded = stranded - Number(distances[box] < 0) + Number(distances[to] < 0);
         if (nextStranded <= spare) actions.push({ box, to, from, direction, id: box * 4 + direction });
       });
     });
-    return { area, actions, key: `${area.first}:${state.boxes.join(',')}` };
+    const key = hasPortals ?
+      [state.player, state.boxes.join(','), state.portalCells.join(',')].join(':') :
+      area.first + ':' + state.boxes.join(',');
+    return { area, actions, key };
   }
 
   class Trainer {
@@ -290,7 +423,7 @@
     estimate(action) {
       const from = this.distances[action.box];
       const to = this.distances[action.to];
-      return from < 0 || to < 0 ? 0 : 0.24 * (from - to);
+      return from === undefined || to === undefined || from < 0 || to < 0 ? 0 : 0.24 * (from - to);
     }
 
     value(key, action) {
@@ -392,7 +525,7 @@
     }
   }
 
-  const api = { examples, readMap, fromRows, readLevel, readWorld, writeWorld, world, bounds, key, point, trainingMap, compile, validate, placed, won, step, Trainer };
+  const api = { examples, readMap, fromRows, readLevel, readWorld, writeWorld, world, bounds, key, point, portalHost, trainingMap, compile, validate, placed, won, step, Trainer };
   if (typeof module === 'object') module.exports = api;
   else root.Sokoban = api;
 })(globalThis);

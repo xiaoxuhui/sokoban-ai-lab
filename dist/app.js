@@ -1,6 +1,6 @@
 'use strict';
 
-const { examples, fromRows, readLevel, writeWorld, world, bounds, key, point, trainingMap, validate, placed, won, step, Trainer } = Sokoban;
+const { examples, fromRows, readLevel, writeWorld, world, bounds, key, point, portalHost, trainingMap, validate, placed, won, step, Trainer } = Sokoban;
 const $ = id => document.getElementById(id);
 const board = $('board');
 const grid = $('grid');
@@ -31,9 +31,11 @@ function loadLevels() {
 const library = loadLevels();
 const sessions = new Map();
 let level = library.entries[library.index];
-let map = world(level.tiles, level.chainPush);
+let map = world(level.tiles, level.chainPush, level.portals);
 let area = bounds(map.tiles);
 let brush = '#';
+let pendingPortal = null;
+let portalMessage = '';
 let mode = 'edit';
 let manual = map.initial;
 let undo = [];
@@ -58,6 +60,7 @@ let visibleArea = '';
 let cells = new Map();
 
 const tileName = { '#': '墙', ' ': '地板', '.': '目标', '$': '箱子', '@': '玩家', '*': '目标上的箱子', '+': '目标上的玩家' };
+const sideNames = ['上边', '右边', '下边', '左边'];
 
 function cellSize() {
   return board.clientWidth < 420 ? 29 : 40;
@@ -121,21 +124,43 @@ function renderBoard(state) {
   layoutBoard();
   const boxes = new Set(state.boxes);
   const editable = mode === 'edit';
+  const linking = editable && brush === 'portal';
+  const marks = new Map();
+  state.portalCells.forEach((coordinate, index) => {
+    if (!marks.has(coordinate)) marks.set(coordinate, []);
+    marks.get(coordinate).push({ side: map.portalSides[index], pair: Math.floor(index / 2) + 1 });
+  });
+  if (linking && pendingPortal) {
+    if (!marks.has(pendingPortal.cell)) marks.set(pendingPortal.cell, []);
+    marks.get(pendingPortal.cell).push({ side: pendingPortal.side, pair: 0 });
+  }
   board.classList.toggle('editable', editable);
+  board.classList.toggle('linking', linking);
   cells.forEach((cell, coordinate) => {
     const goal = map.goals.has(coordinate);
     const tile = map.tiles.get(coordinate) === '#' ? '#' :
       boxes.has(coordinate) ? (goal ? '*' : '$') :
       state.player === coordinate ? (goal ? '+' : '@') : (goal ? '.' : ' ');
-    if (cell.dataset.tile !== tile) {
+    const ends = marks.get(coordinate) ?? [];
+    const signature = ends.map(({ side, pair }) => side + ':' + pair).join(',');
+    if (cell.dataset.tile !== tile || cell.dataset.portals !== signature) {
       cell.dataset.tile = tile;
+      cell.dataset.portals = signature;
       cell.classList.toggle('wall', tile === '#');
       cell.replaceChildren();
       if (goal) cell.append(makeTile('goal'));
       if ('$*'.includes(tile)) cell.append(makeTile(tile === '*' ? 'crate placed' : 'crate'));
       if ('@+'.includes(tile)) cell.append(makeTile('player'));
+      ends.forEach(({ side, pair }) => {
+        const mark = makeTile('portal-mark');
+        mark.dataset.side = side;
+        mark.dataset.tone = (pair - 1) % 4;
+        mark.textContent = pair || '·';
+        cell.append(mark);
+      });
       const [x, y] = point(coordinate);
-      cell.setAttribute('aria-label', '坐标 ' + x + ', ' + y + '，' + tileName[tile]);
+      const label = ends.map(({ side, pair }) => sideNames[side] + (pair ? '传送门 ' + pair : '等待配对')).join('，');
+      cell.setAttribute('aria-label', '坐标 ' + x + ', ' + y + '，' + tileName[tile] + (label ? '，' + label : ''));
     }
     cell.tabIndex = editable ? 0 : -1;
     cell.disabled = !editable;
@@ -153,6 +178,7 @@ function renderMap() {
   const editing = mode === 'edit';
   const playing = mode === 'play';
   const watching = mode === 'watch';
+  const linking = editing && brush === 'portal';
   const state = activeState();
   $('edit-mode').setAttribute('aria-pressed', editing);
   $('play-mode').setAttribute('aria-pressed', playing);
@@ -166,6 +192,10 @@ function renderMap() {
   $('reset-play').disabled = !manual.moves;
   $('record-tools').hidden = !recording;
   $('save-demo').disabled = !manualPath.length;
+  $('portal-cancel').hidden = !linking || !pendingPortal;
+  $('portal-help').hidden = !linking;
+  $('portal-help').textContent = portalMessage || (pendingPortal ? '已选第一端，再点墙或箱子的另一条边。' :
+    '点墙或箱子的两条边配对。点击已有端点可移除整对。');
   $('map-info').textContent = '无限地图 · ' + map.initial.boxes.length + ' 个箱子 · ' + map.goals.size + ' 个目标';
   $('move-count').textContent = '移动 ' + manual.moves + ' 步 · 推箱 ' + manual.pushes + ' 次';
   const problem = editing || watching ? validate(map) || (watching ? trainingProblem : '') : '';
@@ -203,6 +233,10 @@ function setMode(next) {
   clearTimeout(playback);
   playback = 0;
   if (next !== 'play') recording = false;
+  if (next !== 'edit') {
+    pendingPortal = null;
+    portalMessage = '';
+  }
   mode = next;
   if (mode === 'play') followPlayer(manual);
   if (mode === 'watch') {
@@ -224,7 +258,7 @@ function saveLevels() {
     localStorage.setItem(storageKey, JSON.stringify({
       index: library.index,
       levels: library.entries.map(entry => ({
-        name: entry.name, code: writeWorld(entry.tiles, entry.chainPush), demonstration: entry.demonstration,
+        name: entry.name, code: writeWorld(entry.tiles, entry.chainPush, entry.portals), demonstration: entry.demonstration,
       })),
     }));
   } catch { /* Storage is optional. */ }
@@ -244,12 +278,14 @@ function loadBoard(recenter) {
   watchSegment = null;
   watchResult = null;
   nextWatchAt = 0;
-  map = world(level.tiles, level.chainPush);
+  map = world(level.tiles, level.chainPush, level.portals);
   area = bounds(level.tiles);
   manual = map.initial;
   undo = [];
   manualPath = [];
   recording = false;
+  pendingPortal = null;
+  portalMessage = '';
   mode = 'edit';
   $('chain-push').checked = level.chainPush;
   if (recenter) centerMap();
@@ -285,7 +321,7 @@ function addLevels(entries) {
   selectLevel(first);
 }
 
-function changeMap(tiles, recenter = false, chainPush = level.chainPush) {
+function changeMap(tiles, recenter = false, chainPush = level.chainPush, portals = level.portals ?? []) {
   stopActivity();
   sessions.delete(level);
   trainer = null;
@@ -294,6 +330,7 @@ function changeMap(tiles, recenter = false, chainPush = level.chainPush) {
   target = 0;
   level.tiles = tiles;
   level.chainPush = chainPush;
+  level.portals = portals;
   level.demonstration = [];
   saveLevels();
   loadBoard(recenter);
@@ -323,12 +360,72 @@ function paint(coordinate) {
   }
   if (tile === ' ') tiles.delete(coordinate);
   else tiles.set(coordinate, tile);
-  changeMap(tiles);
+  const portals = level.portals ?? [];
+  const sameHost = portalHost(tile) && portalHost(old) && (tile === '#') === (old === '#');
+  const removed = new Set();
+  if (!sameHost) portals.forEach((end, i) => { if (end.cell === coordinate) removed.add(Math.floor(i / 2)); });
+  changeMap(tiles, false, level.chainPush, portals.filter((_, i) => !removed.has(Math.floor(i / 2))));
 }
 
 function cellAt(element) {
   const cell = element?.closest('.cell');
   return cell && board.contains(cell) ? cell.dataset.cell : null;
+}
+
+function choosePortalFace(coordinate, side) {
+  if (!portalHost(map.tiles.get(coordinate))) {
+    portalMessage = '请选择墙或箱子的边。';
+    renderMap();
+    return;
+  }
+  const portals = level.portals ?? [];
+  const index = portals.findIndex(end => end.cell === coordinate && end.side === side);
+  if (index >= 0 && pendingPortal) {
+    portalMessage = '这条边已有传送门，请选择另一条边。';
+  } else if (index >= 0) {
+    const pair = Math.floor(index / 2);
+    openDialog('移除传送门 ' + (pair + 1), '<p>将移除这一对的两个端点。</p>', [
+      actionButton('移除整对', 'primary', () => {
+        changeMap(map.tiles, false, level.chainPush, portals.filter((_, i) => Math.floor(i / 2) !== pair));
+        dialog.close();
+      }),
+    ]);
+    return;
+  } else if (!pendingPortal) {
+    pendingPortal = { cell: coordinate, side };
+    portalMessage = '';
+  } else if (pendingPortal.cell === coordinate && pendingPortal.side === side) {
+    portalMessage = '两端须选在不同的边上。';
+  } else {
+    changeMap(map.tiles, false, level.chainPush, [...portals, pendingPortal, { cell: coordinate, side }]);
+    portalMessage = '双向传送门 ' + (portals.length / 2 + 1) + ' 已建立。';
+  }
+  renderMap();
+}
+
+function portalClick(event, coordinate) {
+  if (!portalHost(map.tiles.get(coordinate))) {
+    choosePortalFace(coordinate, 0);
+    return;
+  }
+  if (event.detail) {
+    const rect = event.target.closest('.cell').getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width;
+    const y = (event.clientY - rect.top) / rect.height;
+    const edges = [y, 1 - x, 1 - y, x];
+    const side = edges.indexOf(Math.min(...edges));
+    if (edges[side] <= 0.34) {
+      choosePortalFace(coordinate, side);
+      return;
+    }
+  }
+  openDialog('选择传送门所在的边', '<div class="level-list"></div>');
+  sideNames.forEach((name, side) => {
+    $('dialog-body').firstElementChild.append(actionButton(name, '', () => {
+      dialog.close();
+      choosePortalFace(coordinate, side);
+    }));
+  });
 }
 
 function pointerPaint(coordinate) {
@@ -353,6 +450,7 @@ board.addEventListener('pointerdown', event => {
   const pan = event.button === 2;
   const coordinate = cellAt(event.target);
   if (gesture || (!pan && (mode !== 'edit' || event.button !== 0 || !coordinate))) return;
+  if (!pan && brush === 'portal') return;
   event.preventDefault();
   gesture = { id: event.pointerId, pan, x: event.clientX, y: event.clientY, camera, lastCell: null };
   board.setPointerCapture(event.pointerId);
@@ -376,7 +474,9 @@ board.addEventListener('lostpointercapture', () => {
 });
 board.addEventListener('click', event => {
   const coordinate = cellAt(event.target);
-  if (mode === 'edit' && event.detail === 0 && coordinate) paint(coordinate);
+  if (mode !== 'edit' || !coordinate) return;
+  if (brush === 'portal') portalClick(event, coordinate);
+  else if (event.detail === 0) paint(coordinate);
 });
 
 function activeState() {
@@ -394,8 +494,16 @@ $('center-map').addEventListener('click', () => {
 document.querySelectorAll('[data-brush]').forEach(button => {
   button.addEventListener('click', () => {
     brush = button.dataset.brush;
+    pendingPortal = null;
+    portalMessage = '';
     document.querySelectorAll('[data-brush]').forEach(tool => tool.setAttribute('aria-pressed', tool === button));
+    renderMap();
   });
+});
+$('portal-cancel').addEventListener('click', () => {
+  pendingPortal = null;
+  portalMessage = '';
+  renderMap();
 });
 $('edit-mode').addEventListener('click', () => setMode('edit'));
 $('play-mode').addEventListener('click', () => setMode('play'));
@@ -442,7 +550,7 @@ $('reset-play').addEventListener('click', resetPlay);
 
 function getTrainer() {
   if (trainer) return trainer;
-  const field = trainingMap(map.tiles, area, level.chainPush);
+  const field = trainingMap(map.tiles, area, level.chainPush, level.portals);
   if (field) return new Trainer(field);
   trainingProblem = '摆放范围超过 40,000 格训练区。请缩小关卡范围后再试。';
   return null;
@@ -575,7 +683,7 @@ function renderTraining() {
 
 function toWorldState(state) {
   const coordinate = trainer.map.worldCell;
-  return { ...state, player: coordinate(state.player), boxes: state.boxes.map(coordinate) };
+  return { ...state, player: coordinate(state.player), boxes: state.boxes.map(coordinate), portalCells: state.portalCells.map(coordinate) };
 }
 
 function syncWatchState() {
@@ -733,6 +841,7 @@ $('help').addEventListener('click', () => {
   openDialog('使用说明', '<p>地图从空白开始，按住鼠标右键拖动可向四周平移。选好工具后，用左键点击或拖动绘制。</p>' +
     '<p>放置一个玩家和至少一个目标，箱子数可以多于目标数。所有目标都被箱子覆盖即可通关，多余箱子可以留在其他位置。点击「回到起点」可回到玩家附近。</p>' +
     '<p>点「手动试玩」，用方向键、WASD 或屏幕方向按钮移动。勾选「允许连推多个箱子」后，玩家和 AI 都能一步推动相邻的一整排箱子，计作一次推箱。</p>' +
+    '<p>用「传送门」依次点选墙或箱子的两条边，同编号的端点双向相通。墙上的入口可直接进入。箱子上的入口随箱子移动，朝着另一个箱子推时，前箱能走就往前推，紧贴墙时则从配对出口送出。出口被占用时，这次传送会被挡住。</p>' +
     '<p>开始训练后，左侧地图会显示 AI 的每一步。可在「观战 AI」中调速度或暂停。切换到编辑或试玩时，AI 会继续加速训练。</p>' +
     '<p>点「示范几步」，从起点演示走位或推箱，再点「保存示范」。AI 每两回合会跟随示范一次，然后自行继续。胜率只统计独立尝试。</p>' +
     '<p>AI 用 Q-learning 反复练习。训练区包含已绘制的地图和外围三格空地，最多 40,000 格。找到通关路线后即可回放。</p>' +
@@ -772,7 +881,7 @@ $('map-code').addEventListener('click', () => {
     '<textarea id="map-text" aria-label="地图文本" aria-describedby="symbols" spellcheck="false" wrap="off"></textarea>',
   [
     actionButton('下载当前地图', 'outline plain', () => {
-      const url = URL.createObjectURL(new Blob([writeWorld(map.tiles, level.chainPush) + '\n'], { type: 'application/json' }));
+      const url = URL.createObjectURL(new Blob([writeWorld(map.tiles, level.chainPush, level.portals) + '\n'], { type: 'application/json' }));
       const link = document.createElement('a');
       link.href = url;
       link.download = 'sokoban-map.json';
@@ -782,14 +891,14 @@ $('map-code').addEventListener('click', () => {
     actionButton('导入文本', 'primary', () => {
       try {
         const imported = readLevel($('map-text').value);
-        changeMap(imported.tiles, true, imported.chainPush);
+        changeMap(imported.tiles, true, imported.chainPush, imported.portals ?? []);
         dialog.close();
       } catch (error) {
         dialogError(error.message);
       }
     }),
   ]);
-  $('map-text').value = writeWorld(map.tiles, level.chainPush);
+  $('map-text').value = writeWorld(map.tiles, level.chainPush, level.portals);
 });
 
 renderLevelPicker();
