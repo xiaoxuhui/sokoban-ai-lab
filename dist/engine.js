@@ -234,14 +234,22 @@
     return map.neighbor(portalCells[exit], map.portalSides[exit]);
   }
 
+  function playerPortal(map, state, occupied, player, direction) {
+    const host = map.adjacent(player, direction);
+    if (map.isWall(host)) return portalOn(map, state, host, opposite(direction));
+    if (occupied.has(host) && map.isWall(map.adjacent(host, direction))) {
+      return portalOn(map, state, host, direction);
+    }
+    return -1;
+  }
+
   function portalStep(map, state, direction) {
     const first = map.adjacent(state.player, direction);
     if (first === -1) return state;
     const occupied = new Set(state.boxes);
-    const face = map.isWall(first) || occupied.has(first) ? portalOn(map, state, first, opposite(direction)) : -1;
-    if (face >= 0) {
-      const entrance = face;
-      const player = portalExit(map, state.portalCells, entrance);
+    const playerEntrance = playerPortal(map, state, occupied, state.player, direction);
+    if (playerEntrance >= 0) {
+      const player = portalExit(map, state.portalCells, playerEntrance);
       if (player === -1 || player === state.player || occupied.has(player)) return state;
       return { ...state, player, moves: state.moves + 1 };
     }
@@ -268,7 +276,7 @@
       const beyond = map.adjacent(ahead, direction);
       const forward = portalOn(map, state, box, direction);
       if (forward >= 0 && map.isWall(beyond)) {
-        // The squeeze takes the front box. Keep the entrance face clear for the return trip.
+        // Only the front box is transmitted. The portal box can be pushed up to the wall next.
         moved.clear();
         player = state.player;
         entrance = forward;
@@ -322,8 +330,7 @@
       first = Math.min(first, cell);
       map.next[cell].forEach((neighbor, direction) => {
         if (map.portalSides.length && (neighbor === -1 || boxes.has(neighbor))) {
-          const host = map.adjacent(cell, direction);
-          const entrance = portalOn(map, state, host, opposite(direction));
+          const entrance = playerPortal(map, state, boxes, cell, direction);
           neighbor = portalExit(map, state.portalCells, entrance);
         }
         if (neighbor < 0 || previous[neighbor] >= 0 || boxes.has(neighbor)) return;
