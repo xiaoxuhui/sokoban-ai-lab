@@ -881,7 +881,12 @@ function renderTraining() {
   $('replay-single').disabled = $('replay').disabled;
   renderPartialRoutes(best);
   const demoLength = level.demonstration?.length ?? 0;
-  $('demo-summary').textContent = demoLength ? '已保存 ' + demoLength + ' 步 · 每两回合使用一次' : '演示几步，帮 AI 练习下一步。';
+  let demoNote = '可以演示开局或完整通关路线。';
+  if (demoLength) {
+    demoNote = trainer && !trainer.demonstration ? '已保存的示范与当前地图或规则不匹配，请重录。' :
+      '已保存 ' + demoLength + ' 步' + (trainer?.demonstration?.complete ? ' · 通关示范' : '');
+  }
+  $('demo-summary').textContent = demoNote;
   $('record-demo').textContent = demoLength ? '重录示范' : '示范几步';
   $('record-demo').disabled = Boolean(problem) || recording || playback !== 0;
   $('delete-demo').hidden = !demoLength;

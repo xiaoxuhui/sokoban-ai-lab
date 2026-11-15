@@ -621,20 +621,34 @@
     setDemonstration(directions) {
       const map = this.map;
       let state = map.initial;
+      let decision = state;
       const trace = [];
       const milestones = [];
+      const demonstrated = new Map();
       for (const direction of directions) {
         const next = step(map, state, direction);
         if (next === state || won(map, state)) return false;
         if (next.pushes > state.pushes) {
           milestones.push({ state: next, length: next.moves });
-          const { key, actions } = choices(map, state, this.distances);
+          const { key, actions } = choices(map, decision, this.distances);
           const action = actions.find(candidate => candidate.from === state.player && candidate.direction === direction);
-          if (action) trace.push([key, action, this.reward(state, next, action, false)]);
+          if (action) {
+            trace.push([key, action, this.reward(decision, next, action, false)]);
+            demonstrated.set(key, { action, actions });
+          }
+          decision = next;
         }
         state = next;
       }
-      this.demonstration = directions.length ? { directions: directions.slice(), state, trace, milestones } : null;
+      const complete = won(map, state);
+      if (complete) {
+        // Use the last successful continuation for each state in a looping demonstration.
+        for (const [key, { action, actions }] of demonstrated) {
+          const bestValue = actions.reduce((best, candidate) => Math.max(best, this.value(key, candidate)), 0);
+          this.learn(key, action, bestValue + 1);
+        }
+      }
+      this.demonstration = directions.length ? { directions: directions.slice(), state, trace, milestones, complete } : null;
       this.guidedStart = this.episodes;
       this.guided = false;
       this.state = map.initial;
@@ -700,21 +714,26 @@
       let path = [];
       let trace = [];
       this.keepPartial(state, path);
-      this.guided = Boolean(this.demonstration && (this.episodes - this.guidedStart) % 2 === 0);
+      const opening = this.demonstration;
+      const sinceDemo = this.episodes - this.guidedStart;
+      const demonstratedPushes = opening?.complete ? opening.state.pushes : 0;
+      this.guided = Boolean(opening && (opening.complete ? sinceDemo === 0 : sinceDemo % 2 === 0));
+      // A successful demonstration gives independent episodes a policy to exploit.
+      const epsilon = opening?.complete ?
+        (sinceDemo % 4 === 0 ? 1 / Math.max(demonstratedPushes, 4) : 0) : this.epsilon;
       if (this.guided) {
-        const opening = this.demonstration;
         path = opening.directions.slice();
         trace = opening.trace.slice();
         for (const point of opening.milestones) this.keepPartial(point.state, path, point.length);
         state = this.state = opening.state;
         yield { from: map.initial, directions: opening.directions, demonstration: true };
       }
-      const pushLimit = state.pushes + this.maxPushes;
+      const pushLimit = state.pushes + Math.max(this.maxPushes, demonstratedPushes);
       let current = choices(map, state, this.distances);
       while (current.actions.length && state.pushes < pushLimit && !current.finishReachable && !won(map, state)) {
         const actions = current.actions;
         let action = actions[Math.floor(this.random() * actions.length)];
-        if (this.random() >= this.epsilon) {
+        if (this.random() >= epsilon) {
           for (const candidate of actions) {
             if (this.value(current.key, candidate) > this.value(current.key, action)) action = candidate;
           }
