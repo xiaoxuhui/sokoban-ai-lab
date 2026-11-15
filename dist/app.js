@@ -59,6 +59,9 @@ let listedRoutes = null;
 let listedCount = 0;
 let gesture = null;
 let camera = { x: 0.5, y: 0.5 };
+let laidOutCamera = null;
+let viewWidth = board.clientWidth;
+let viewHeight = board.clientHeight;
 let visibleArea = '';
 let cells = new Map();
 
@@ -66,7 +69,7 @@ const tileName = { '#': '墙', ' ': '地板', '.': '目标', '$': '箱子', '@':
 const sideNames = ['上边', '右边', '下边', '左边'];
 
 function cellSize() {
-  return board.clientWidth < 420 ? 29 : 40;
+  return viewWidth < 420 ? 29 : 40;
 }
 
 function centerMap() {
@@ -83,20 +86,21 @@ function followPlayer(state) {
   if (state.player === -1) return;
   const [x, y] = point(state.player);
   const size = cellSize();
-  if (Math.abs(x + 0.5 - camera.x) > board.clientWidth / size / 2 - 1.5 ||
-      Math.abs(y + 0.5 - camera.y) > board.clientHeight / size / 2 - 1.5) {
+  if (Math.abs(x + 0.5 - camera.x) > viewWidth / size / 2 - 1.5 ||
+      Math.abs(y + 0.5 - camera.y) > viewHeight / size / 2 - 1.5) {
     camera = { x: x + 0.5, y: y + 0.5 };
   }
 }
 
 function layoutBoard() {
+  laidOutCamera = camera;
   const size = cellSize();
-  const left = camera.x - board.clientWidth / size / 2;
-  const top = camera.y - board.clientHeight / size / 2;
+  const left = camera.x - viewWidth / size / 2;
+  const top = camera.y - viewHeight / size / 2;
   const startX = Math.floor(left);
   const startY = Math.floor(top);
-  const columns = Math.ceil(left + board.clientWidth / size) - startX;
-  const rowCount = Math.ceil(top + board.clientHeight / size) - startY;
+  const columns = Math.ceil(left + viewWidth / size) - startX;
+  const rowCount = Math.ceil(top + viewHeight / size) - startY;
   const signature = [startX, startY, columns, rowCount, size].join(',');
   const transform = 'translate(' + (startX - left) * size + 'px, ' + (startY - top) * size + 'px)';
   if (grid.style.transform !== transform) grid.style.transform = transform;
@@ -124,13 +128,17 @@ function layoutBoard() {
   cells = nextCells;
 }
 
-function renderBoard(state) {
-  layoutBoard();
-  const boxes = new Set(state.boxes);
+function renderBoard(state, previous = null) {
+  const full = previous === null || camera !== laidOutCamera;
+  if (full) layoutBoard();
+  // Walking cannot change box occupancy in either of the player's two cells.
+  const boxes = full || state.boxes !== previous.boxes ? new Set(state.boxes) : null;
+  const changed = full ? null : changedCells(previous, state, boxes);
   const editable = mode === 'edit';
   const linking = editable && brush === 'portal';
   const marks = new Map();
   state.portalCells.forEach((coordinate, index) => {
+    if (changed && !changed.has(coordinate)) return;
     if (!marks.has(coordinate)) marks.set(coordinate, []);
     marks.get(coordinate).push({ side: map.portalSides[index], pair: Math.floor(index / 2) + 1 });
   });
@@ -138,13 +146,11 @@ function renderBoard(state) {
     if (!marks.has(pendingPortal.cell)) marks.set(pendingPortal.cell, []);
     marks.get(pendingPortal.cell).push({ side: pendingPortal.side, pair: 0 });
   }
-  board.classList.toggle('editable', editable);
-  board.classList.toggle('linking', linking);
-  cells.forEach((cell, coordinate) => {
+  const drawCell = (cell, coordinate) => {
     const goal = map.goals.has(coordinate);
     const finish = map.finish === coordinate;
     const tile = map.tiles.get(coordinate) === '#' ? '#' :
-      boxes.has(coordinate) ? (goal ? '*' : '$') :
+      boxes?.has(coordinate) ? (goal ? '*' : '$') :
       state.player === coordinate ? (goal ? '+' : '@') : (goal ? '.' : ' ');
     const ends = marks.get(coordinate) ?? [];
     const signature = ends.map(({ side, pair }) => side + ':' + pair).join(',');
@@ -170,9 +176,37 @@ function renderBoard(state) {
       cell.setAttribute('aria-label', '坐标 ' + x + ', ' + y + '，' + tileName[tile] +
         (finish ? '，玩家终点' : '') + (label ? '，' + label : ''));
     }
-    if (cell.tabIndex !== (editable ? 0 : -1)) cell.tabIndex = editable ? 0 : -1;
-    if (cell.disabled === editable) cell.disabled = !editable;
+  };
+  if (full) {
+    board.classList.toggle('editable', editable);
+    board.classList.toggle('linking', linking);
+    cells.forEach((cell, coordinate) => {
+      drawCell(cell, coordinate);
+      if (cell.tabIndex !== (editable ? 0 : -1)) cell.tabIndex = editable ? 0 : -1;
+      if (cell.disabled === editable) cell.disabled = !editable;
+    });
+  } else {
+    for (const coordinate of changed) {
+      const cell = cells.get(coordinate);
+      if (cell) drawCell(cell, coordinate);
+    }
+  }
+}
+
+function changedCells(previous, state, boxes) {
+  const changed = new Set([previous.player, state.player]);
+  if (boxes) {
+    const before = new Set(previous.boxes);
+    for (const coordinate of before) if (!boxes.has(coordinate)) changed.add(coordinate);
+    for (const coordinate of boxes) if (!before.has(coordinate)) changed.add(coordinate);
+  }
+  state.portalCells.forEach((coordinate, index) => {
+    const old = previous.portalCells[index];
+    if (old === coordinate) return;
+    changed.add(old);
+    changed.add(coordinate);
   });
+  return changed;
 }
 
 function makeTile(className) {
@@ -229,8 +263,8 @@ function setMapNote(message, status = '') {
   if (note.textContent !== message) note.textContent = message;
 }
 
-function renderManual() {
-  renderBoard(manual);
+function renderManual(previous = null) {
+  renderBoard(manual, previous);
   $('undo').disabled = !undo.length;
   $('reset-play').disabled = !manual.moves;
   $('save-demo').disabled = !manualPath.length;
@@ -550,7 +584,11 @@ function activeState() {
   return mode === 'edit' ? map.initial : mode === 'play' ? manual : replayState;
 }
 
-new ResizeObserver(() => renderBoard(activeState())).observe(board);
+new ResizeObserver(() => {
+  viewWidth = board.clientWidth;
+  viewHeight = board.clientHeight;
+  renderBoard(activeState());
+}).observe(board);
 $('center-map').addEventListener('click', () => {
   centerMap();
   if (mode !== 'edit') followPlayer(activeState());
@@ -580,11 +618,12 @@ function move(direction) {
   if (mode !== 'play' || won(map, manual)) return;
   const next = step(map, manual, direction);
   if (next === manual) return;
-  undo.push(manual);
+  const previous = manual;
+  undo.push(previous);
   manualPath.push(direction);
   manual = next;
   followPlayer(manual);
-  renderManual();
+  renderManual(previous);
 }
 
 document.querySelectorAll('[data-dir]').forEach(button => button.addEventListener('click', () => move(Number(button.dataset.dir))));
@@ -609,10 +648,11 @@ document.addEventListener('keyup', event => heldDirections.delete(keyIdentity(ev
 window.addEventListener('blur', () => heldDirections.clear());
 $('undo').addEventListener('click', () => {
   if (!undo.length) return;
+  const previous = manual;
   manual = undo.pop();
   manualPath.pop();
   followPlayer(manual);
-  renderManual();
+  renderManual(previous);
 });
 function resetPlay() {
   manual = map.initial;
