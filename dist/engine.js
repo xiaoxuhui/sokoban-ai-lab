@@ -28,6 +28,36 @@
   const opposite = direction => (direction + 2) % 4;
   const portalHost = tile => tile === '#' || tile === '$' || tile === '*';
 
+  function addPortalFace(index, cell, side, endpoint) {
+    let faces = index.get(cell);
+    if (!faces) {
+      faces = [];
+      index.set(cell, faces);
+    }
+    faces[side] ??= endpoint;
+  }
+
+  function indexPortals(portals, isWall) {
+    const fixed = new Map();
+    const movable = [];
+    portals.forEach(({ cell, side }, index) => {
+      if (isWall(cell)) addPortalFace(fixed, cell, side, index);
+      else movable.push(index);
+    });
+    return { fixed, movable, cache: new WeakMap() };
+  }
+
+  function movingFaces(map, portalCells) {
+    const { movable, cache } = map.portalIndex;
+    let index = cache.get(portalCells);
+    if (!index) {
+      index = new Map();
+      for (const endpoint of movable) addPortalFace(index, portalCells[endpoint], map.portalSides[endpoint], endpoint);
+      cache.set(portalCells, index);
+    }
+    return index;
+  }
+
   function compile(rows, chainPush = false, portals = [], finish = null) {
     const width = rows[0].length;
     const tiles = rows.join('');
@@ -52,6 +82,7 @@
       adjacent: (cell, direction) => adjacent[cell][direction],
       neighbor: (cell, direction) => next[cell][direction],
       portalSides: portals.map(end => end.side),
+      portalIndex: indexPortals(portals, isWall),
       initial: { player, boxes, moves: 0, pushes: 0, portalCells: portals.map(end => end.cell) },
     };
   }
@@ -144,13 +175,15 @@
       if ('@+'.includes(tile)) player = cell;
     }
     const adjacent = (cell, direction) => {
-      const [x, y] = point(cell);
       const [dx, dy] = directions[direction];
-      return key(x + dx, y + dy);
+      const comma = cell.indexOf(',');
+      return dx ? (Number(cell.slice(0, comma)) + dx) + cell.slice(comma) :
+        cell.slice(0, comma + 1) + (Number(cell.slice(comma + 1)) + dy);
     };
     const isWall = cell => tiles.get(cell) === '#';
     return {
       tiles, goals, finish, chainPush, isWall, adjacent, portalSides: portals.map(end => end.side),
+      portalIndex: indexPortals(portals, isWall),
       initial: { player, boxes, moves: 0, pushes: 0, portalCells: portals.map(end => end.cell) },
       neighbor(cell, direction) {
         const next = adjacent(cell, direction);
@@ -235,15 +268,39 @@
     if (box < 0) return { ...state, player, moves: state.moves + 1 };
     const landing = pushLanding(map, player, direction, new Set(state.boxes));
     if (landing === -1) return state;
+    return moveStraight(map, state, player, box, landing, direction);
+  }
+
+  function moveStraight(map, state, player, box, landing, direction, single = !map.chainPush) {
     // Every intermediate square still contains a box after the chain moves.
     const boxes = [...state.boxes];
     boxes[box] = landing;
     if (typeof landing === 'number') boxes.sort((a, b) => a - b);
-    return { ...state, player, boxes, moves: state.moves + 1, pushes: state.pushes + 1 };
+    let portalCells = state.portalCells;
+    const { movable } = map.portalIndex;
+    if (movable.length) {
+      const moveFace = (endpoint, next) => {
+        if (portalCells === state.portalCells) portalCells = portalCells.slice();
+        portalCells[endpoint] = next;
+      };
+      const index = movable.length > 4 ? movingFaces(map, portalCells) : null;
+      for (let cell = player; cell !== landing;) {
+        const next = single ? landing : map.adjacent(cell, direction);
+        if (index) {
+          index.get(cell)?.forEach(endpoint => moveFace(endpoint, next));
+        } else {
+          for (const endpoint of movable) if (state.portalCells[endpoint] === cell) moveFace(endpoint, next);
+        }
+        cell = next;
+      }
+    }
+    return { ...state, player, boxes, portalCells, moves: state.moves + 1, pushes: state.pushes + 1 };
   }
 
-  function portalOn(map, state, cell, side) {
-    return state.portalCells.findIndex((host, i) => host === cell && map.portalSides[i] === side);
+  function portalOn(map, portalCells, cell, side) {
+    if (map.isWall(cell)) return map.portalIndex.fixed.get(cell)?.[side] ?? -1;
+    if (!map.portalIndex.movable.length) return -1;
+    return movingFaces(map, portalCells).get(cell)?.[side] ?? -1;
   }
 
   function tracePortalExit(map, portalCells, entrance, occupied) {
@@ -258,7 +315,7 @@
       if (cell === -1) return null;
       const wall = map.isWall(cell);
       if (wall || occupied.has(cell)) {
-        entrance = portalOn(map, { portalCells }, cell, opposite(direction));
+        entrance = portalOn(map, portalCells, cell, opposite(direction));
         if (entrance >= 0) continue;
       }
       return wall ? null : { cell, direction, pairs };
@@ -270,19 +327,33 @@
     const host = map.adjacent(player, direction);
     if (!map.isWall(host) && !occupied.has(host)) return -1;
     // portalStep tries every box move before letting the player enter the touched face.
-    return portalOn(map, state, host, opposite(direction));
+    return portalOn(map, state.portalCells, host, opposite(direction));
   }
 
   function portalStep(map, state, direction) {
     const first = map.adjacent(state.player, direction);
     if (first === -1) return state;
-    const occupied = new Set(state.boxes);
-    if (occupied.has(first)) {
+    const box = state.boxes.indexOf(first);
+    const wall = map.isWall(first);
+    if (box < 0 && !wall) return { ...state, player: first, moves: state.moves + 1 };
+
+    let occupied;
+    if (box >= 0) {
+      const ahead = map.neighbor(first, direction);
+      if (ahead !== -1 && !state.boxes.includes(ahead)) {
+        return moveStraight(map, state, first, box, ahead, direction, true);
+      }
+      occupied = new Set(state.boxes);
+      if (map.chainPush && ahead !== -1) {
+        const landing = pushLanding(map, first, direction, occupied);
+        if (landing !== -1) return moveStraight(map, state, first, box, landing, direction);
+      }
       const pushed = pushThroughPortal(map, state, occupied, first, direction);
       if (pushed !== state) return pushed;
     }
-    const playerEntrance = playerPortal(map, state, occupied, state.player, direction);
+    const playerEntrance = portalOn(map, state.portalCells, first, opposite(direction));
     if (playerEntrance >= 0) {
+      occupied ??= new Set(state.boxes);
       const exit = tracePortalExit(map, state.portalCells, playerEntrance, occupied);
       if (!exit || exit.cell === state.player) return state;
       const player = exit.cell;
@@ -291,8 +362,7 @@
       }
       return { ...state, player, moves: state.moves + 1 };
     }
-    if (map.isWall(first) || occupied.has(first)) return state;
-    return { ...state, player: first, moves: state.moves + 1 };
+    return state;
   }
 
   function pushPlans(map, state, occupied, first, direction) {
@@ -304,7 +374,7 @@
       const ahead = map.adjacent(box, direction);
       if (ahead === -1) return [];
       if (map.isWall(ahead)) {
-        const entrance = portalOn(map, state, ahead, opposite(direction));
+        const entrance = portalOn(map, state.portalCells, ahead, opposite(direction));
         if (entrance >= 0) wall.push({ entrance, cargo: box, moved });
         break;
       }
@@ -314,8 +384,8 @@
         return [{ moved }];
       }
       const beyond = map.adjacent(ahead, direction);
-      const forward = portalOn(map, state, box, direction);
-      const facing = portalOn(map, state, ahead, opposite(direction));
+      const forward = portalOn(map, state.portalCells, box, direction);
+      const facing = portalOn(map, state.portalCells, ahead, opposite(direction));
       if (facing >= 0) rear.push({ entrance: facing, cargo: box, moved: new Map() });
       if (forward >= 0) {
         // In a chain push, the boxes behind transmitted cargo fill the gap.
@@ -325,7 +395,7 @@
       }
       if (!map.chainPush && facing < 0 && !map.isWall(beyond)) break;
       if (!map.chainPush && map.isWall(beyond)) {
-        const wallEntrance = portalOn(map, state, beyond, opposite(direction));
+        const wallEntrance = portalOn(map, state.portalCells, beyond, opposite(direction));
         if (wallEntrance < 0) break;
       }
       moved.set(box, ahead);
