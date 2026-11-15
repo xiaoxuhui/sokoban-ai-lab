@@ -627,22 +627,26 @@
     return distances;
   }
 
-  function deviceChoices(map, state) {
+  function deviceStateKey(state) {
+    const layout = [...state.devices].map(([cell, { kind, direction }]) => cell + ':' + kind + ':' + direction);
+    return state.boxes.slice().sort().join(';') + '|' + layout.sort().join(';');
+  }
+
+  function deviceChoices(map, state, visited) {
+    const key = deviceStateKey(state);
+    visited?.add(key);
     const clickKind = map.gameplay === 'powered' ? 'power' : 'pusher';
-    const layout = [];
     const actions = [];
-    for (const [cell, { kind, direction }] of state.devices) {
-      layout.push(cell + ':' + kind + ':' + direction);
+    for (const [cell, { kind }] of state.devices) {
       if (kind !== clickKind) continue;
       const next = activateDevice(map, state, cell).state;
-      if (next !== state) actions.push({ id: cell, next });
+      if (next !== state && (!visited || !visited.has(deviceStateKey(next)))) actions.push({ id: cell, next });
     }
-    const key = state.boxes.slice().sort().join(';') + '|' + layout.sort().join(';');
     return { key, actions, finishReachable: false };
   }
 
-  function choices(map, state, distances) {
-    if (state.devices) return deviceChoices(map, state);
+  function choices(map, state, distances, visited) {
+    if (state.devices) return deviceChoices(map, state, visited);
     const area = reach(map, state);
     const actions = [];
     const hasPortals = map.portalSides.length > 0;
@@ -708,7 +712,7 @@
       this.demonstration = null;
       this.guidedStart = 0;
       this.guided = false;
-      this.maxPushes = Math.min(160, Math.max(35, map.initial.boxes.length * 28, (map.initial.devices?.size ?? 0) * 4));
+      this.maxPushes = map.initial.devices ? Infinity : Math.min(160, Math.max(35, map.initial.boxes.length * 28));
     }
 
     setDemonstration(directions) {
@@ -824,7 +828,8 @@
         yield { from: map.initial, directions: opening.directions, demonstration: true };
       }
       const pushLimit = state.pushes + Math.max(this.maxPushes, demonstratedPushes);
-      let current = choices(map, state, this.distances);
+      const visited = state.devices ? new Set() : undefined;
+      let current = choices(map, state, this.distances, visited);
       while (current.actions.length && state.pushes < pushLimit && !current.finishReachable && !won(map, state)) {
         const actions = current.actions;
         let action = actions[Math.floor(this.random() * actions.length)];
@@ -844,7 +849,7 @@
           inputs.push(action.direction);
         }
         path.push(...inputs);
-        const next = choices(map, nextState, this.distances);
+        const next = choices(map, nextState, this.distances, visited);
         const solved = next.finishReachable || won(map, nextState);
         const stuck = next.actions.length === 0;
         const timedOut = nextState.pushes >= pushLimit;
