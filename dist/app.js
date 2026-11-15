@@ -7,10 +7,14 @@ const grid = $('grid');
 const dialog = $('dialog');
 const storageKey = 'sokoban-lab-levels-v1';
 const followAiKey = 'sokoban-lab-follow-ai-v1';
+const portalArrowsKey = 'sokoban-lab-portal-arrows-v1';
 const aiFollow = $('ai-follow');
+const portalArrowToggle = $('show-portal-arrows');
+const portalCanvas = $('portal-arrows');
 try {
   aiFollow.checked = localStorage.getItem(followAiKey) !== 'off';
-} catch { /* The control also works without storage. */ }
+  portalArrowToggle.checked = localStorage.getItem(portalArrowsKey) !== 'off';
+} catch { /* These controls also work without storage. */ }
 const recordBudget = 'next-record';
 const number = new Intl.NumberFormat('zh-CN');
 const brushButtons = [...document.querySelectorAll('[data-brush]')];
@@ -76,9 +80,12 @@ let viewWidth = board.clientWidth;
 let viewHeight = board.clientHeight;
 let visibleArea = '';
 let cells = new Map();
+let portalArrowLayout = null;
 
 const tileName = { '#': '墙', ' ': '地板', '.': '目标', '$': '箱子', '@': '玩家', '*': '目标上的箱子', '+': '目标上的玩家' };
 const sideNames = ['上边', '右边', '下边', '左边'];
+const portalOffsets = [[0, -0.32], [0.32, 0], [0, 0.32], [-0.32, 0]];
+const portalColors = ['#92dcff', '#f0b7ff', '#ffe09c', '#affae3'];
 
 function cellSize() {
   return viewWidth < 420 ? 29 : 40;
@@ -214,6 +221,98 @@ function renderBoard(state, previous = null) {
       const cell = cells.get(coordinate);
       if (cell) drawCell(cell, coordinate);
     }
+  }
+  renderPortalArrows(state);
+}
+
+function visiblePortalSpan(from, to) {
+  let start = 0;
+  let end = 1;
+  const margin = 7;
+  for (const [axis, size] of [[0, viewWidth], [1, viewHeight]]) {
+    const origin = from[axis];
+    const delta = to[axis] - origin;
+    if (delta === 0) {
+      if (origin < margin || origin > size - margin) return null;
+      continue;
+    }
+    const a = (margin - origin) / delta;
+    const b = (size - margin - origin) / delta;
+    start = Math.max(start, Math.min(a, b));
+    end = Math.min(end, Math.max(a, b));
+    if (start >= end) return null;
+  }
+  return [start, end];
+}
+
+function drawArrowhead(context, x, y, dx, dy, length) {
+  const halfWidth = length * 0.47;
+  context.beginPath();
+  context.moveTo(x, y);
+  context.lineTo(x - dx * length + dy * halfWidth, y - dy * length - dx * halfWidth);
+  context.lineTo(x - dx * length - dy * halfWidth, y - dy * length + dx * halfWidth);
+  context.closePath();
+  context.fill();
+}
+
+function renderPortalArrows(state) {
+  const links = state.portalCells;
+  $('portal-arrows-option').hidden = !links.length;
+  portalCanvas.hidden = !portalArrowToggle.checked || !links.length;
+  if (portalCanvas.hidden) {
+    portalArrowLayout = null;
+    return;
+  }
+
+  const scale = window.devicePixelRatio || 1;
+  if (portalArrowLayout?.map === map && portalArrowLayout.camera === camera && portalArrowLayout.scale === scale &&
+      portalArrowLayout.width === viewWidth && portalArrowLayout.height === viewHeight &&
+      (portalArrowLayout.links === links || links.every((cell, index) => portalArrowLayout.links[index] === cell))) return;
+  portalArrowLayout = { map, camera, scale, width: viewWidth, height: viewHeight, links };
+  const width = Math.round(viewWidth * scale);
+  const height = Math.round(viewHeight * scale);
+  if (portalCanvas.width !== width) portalCanvas.width = width;
+  if (portalCanvas.height !== height) portalCanvas.height = height;
+  const context = portalCanvas.getContext('2d');
+  context.setTransform(scale, 0, 0, scale, 0, 0);
+  context.clearRect(0, 0, viewWidth, viewHeight);
+  context.setLineDash([5, 4]);
+  context.lineWidth = 1.6;
+  const size = cellSize();
+  const facePoint = index => {
+    const [x, y] = point(links[index]);
+    const [offsetX, offsetY] = portalOffsets[map.portalSides[index]];
+    return [(x + 0.5 + offsetX - camera.x) * size + viewWidth / 2,
+      (y + 0.5 + offsetY - camera.y) * size + viewHeight / 2];
+  };
+
+  for (let index = 0; index < links.length; index += 2) {
+    const from = facePoint(index);
+    const to = facePoint(index + 1);
+    const span = visiblePortalSpan(from, to);
+    if (!span) continue;
+    const [start, end] = span;
+    const dx = to[0] - from[0];
+    const dy = to[1] - from[1];
+    const length = Math.hypot(dx, dy);
+    if (length === 0) continue;
+    const x1 = from[0] + start * dx;
+    const y1 = from[1] + start * dy;
+    const x2 = from[0] + end * dx;
+    const y2 = from[1] + end * dy;
+    const bothWays = !map.portalIndex.exitOnly[index + 1];
+    const headLength = Math.min(9, length * (end - start) / (bothWays ? 3 : 2));
+    const color = portalColors[(index / 2) % portalColors.length];
+
+    context.strokeStyle = context.fillStyle = color;
+    context.globalAlpha = 0.58;
+    context.beginPath();
+    context.moveTo(x1, y1);
+    context.lineTo(x2, y2);
+    context.stroke();
+    context.globalAlpha = 0.94;
+    drawArrowhead(context, x2, y2, dx / length, dy / length, headLength);
+    if (bothWays) drawArrowhead(context, x1, y1, -dx / length, -dy / length, headLength);
   }
 }
 
@@ -780,6 +879,12 @@ aiFollow.addEventListener('change', () => {
   const state = activeState();
   followAi(state);
   renderBoard(state);
+});
+portalArrowToggle.addEventListener('change', () => {
+  try {
+    localStorage.setItem(portalArrowsKey, portalArrowToggle.checked ? 'on' : 'off');
+  } catch { /* Arrows can still be toggled in this session. */ }
+  renderPortalArrows(activeState());
 });
 
 brushButtons.forEach(button => {

@@ -6,9 +6,9 @@
   <meta name="description" content="绘制自定义地图，手动试玩，观察 AI 通过强化学习掌握推箱子。">
   <meta name="theme-color" content="#111715">
   <title>推箱子实验室</title>
-  <link rel="stylesheet" href="style.css?v=44">
+  <link rel="stylesheet" href="style.css?v=45">
   <script src="engine.js?v=43" defer></script>
-  <script src="app.js?v=44" defer></script>
+  <script src="app.js?v=45" defer></script>
 </head>
 <body>
   <header class="top">
@@ -107,9 +107,11 @@
 
         <div class="stage board" id="board" role="group" aria-label="无限推箱子地图" aria-describedby="pan-help">
           <div id="grid" class="grid"></div>
+          <canvas class="portal-arrows" id="portal-arrows" aria-hidden="true" hidden></canvas>
         </div>
         <div class="viewport-tools">
           <span id="pan-help">按住右键拖动地图</span>
+          <label class="rule-toggle" id="portal-arrows-option" hidden><input id="show-portal-arrows" type="checkbox" checked> 传送门箭头</label>
           <label class="rule-toggle" id="ai-follow-option" hidden><input id="ai-follow" type="checkbox" checked> 跟随 AI</label>
           <button class="plain" id="center-map" type="button">回到起点</button>
         </div>

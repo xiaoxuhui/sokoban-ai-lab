@@ -69,6 +69,7 @@ h2 { margin: 0; font-size: 19px; letter-spacing: .025em; line-height: 1.35; }
 .portal-tools select { margin-left: 2px; padding: 3px 5px; }
 .stage { background: #111914; border: 1px solid #29392f; border-radius: 13px; height: clamp(310px, 44vh, 450px); position: relative; overflow: hidden; }
 .board { touch-action: none; user-select: none; }
+.portal-arrows { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; pointer-events: none; }
 .grid { position: absolute; inset: 0 auto auto 0; display: grid; grid-template-columns: repeat(var(--cols), var(--cell-size)); grid-auto-rows: var(--cell-size); }
 .cell { display: grid; place-items: center; position: relative; background: #202d25; border: 0; border-right: 1px solid #344439; border-bottom: 1px solid #344439; border-radius: 0; padding: 0; color: inherit; min-width: 0; }
 .cell:disabled { opacity: 1; pointer-events: none; }
