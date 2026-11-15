@@ -184,7 +184,7 @@
       const cell = key(x, y);
       if (![x, y].every(value => Number.isSafeInteger(value) && Math.abs(value) <= 1e12) ||
           !deviceKinds.includes(kind) || !Number.isInteger(direction) || !directions[direction] ||
-          devices.has(cell) || '$*@+'.includes(tiles.get(cell) ?? ' ')) {
+          devices.has(cell) || '$*'.includes(tiles.get(cell) ?? ' ')) {
         throw new Error('请检查装置坐标、朝向或重叠的方块。');
       }
       devices.set(cell, { kind, direction });
@@ -229,7 +229,7 @@
     };
     const pusherMode = gameplay !== 'classic';
     const isWall = cell => !pusherMode && tiles.get(cell) === '#';
-    const initial = { player, boxes, moves: 0, pushes: 0, portalCells: [] };
+    const initial = { player: pusherMode ? -1 : player, boxes, moves: 0, pushes: 0, portalCells: [] };
     if (pusherMode) {
       portals = [];
       finish = null;
@@ -263,7 +263,7 @@
       top = Math.min(top, y);
       bottom = Math.max(bottom, y);
     };
-    for (const [cell, tile] of tiles) if (!devices || tile !== '#') include(cell);
+    for (const [cell, tile] of tiles) if (!devices || !'#@'.includes(tile)) include(cell);
     if (devices) for (const cell of devices.keys()) include(cell);
     return { left, top, right, bottom };
   }
@@ -291,7 +291,7 @@
   }
 
   function validate(map) {
-    if (map.initial.player === -1 && map.gameplay !== 'direct') return '请放置一个玩家起点。';
+    if (map.initial.player === -1 && !map.initial.devices) return '请放置一个玩家起点。';
     if (!map.goals.size && map.finish === null) return '请至少放置一个箱子目标或玩家终点。';
     if (map.initial.boxes.length < map.goals.size) return '箱子不足，无法覆盖所有目标点。';
     return '';
@@ -319,11 +319,6 @@
 
   function step(map, state, direction) {
     if (state.player === -1 || !directions[direction]) return state;
-    if (state.devices) {
-      const player = map.adjacent(state.player, direction);
-      if (state.devices.has(player) || state.boxes.includes(player)) return state;
-      return { ...state, player, moves: state.moves + 1 };
-    }
     if (map.portalSides.length) return portalStep(map, state, direction);
     const player = map.neighbor(state.player, direction);
     if (player === -1) return state;
@@ -339,17 +334,15 @@
     const selected = devices?.get(cell);
     if (!selected) return { state };
     let head = cell;
-    const direction = selected.direction;
+    let direction = selected.direction;
     if (map.gameplay === 'powered') {
       if (selected.kind !== 'power') return { state };
-      if (!directions.some((_, side) => map.adjacent(cell, side) === state.player)) {
-        return { state, message: '走到电源紧邻的一格再点击。' };
-      }
       head = map.adjacent(cell, direction);
       const receiver = devices.get(head);
-      if (receiver?.kind !== 'pusher' || receiver.direction !== direction) {
-        return { state, message: '电源的箭头要正对相邻推头的背面。' };
+      if (receiver?.kind !== 'pusher') {
+        return { state, message: '电源的箭头要指向紧邻的推头。' };
       }
+      direction = receiver.direction;
     } else if (selected.kind !== 'pusher') return { state };
 
     const boxes = new Set(state.boxes);
@@ -366,7 +359,6 @@
       landing = next;
       if (!map.chainPush && occupied(landing)) return { state, message: '前面有多个方块。可开启连推后一起推。' };
     }
-    if (landing === state.player) return { state, message: '玩家挡在推头的前进路线上。' };
     const nextDevices = movesDevice ? new Map([...devices].map(([coordinate, device]) =>
       [moved.get(coordinate) ?? coordinate, device])) : devices;
     return { state: {

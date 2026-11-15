@@ -327,7 +327,7 @@ function renderManual(previous = null) {
   const solved = won(map, manual, covered);
   let message = recording ? (solved ? '示范已通关，可以保存。' : '示范中。走几步或推几次箱后即可保存。') :
     (solved ? '通关！' : objectiveProgress(manual, covered));
-  if (manual.devices && !solved) message += map.gameplay === 'powered' ? ' · 走到电源旁再点击' : ' · 点击推头';
+  if (manual.devices && !solved) message += map.gameplay === 'powered' ? ' · 点击电源' : ' · 点击推头';
   setMapNote(message, solved ? 'success' : '');
 }
 
@@ -527,7 +527,7 @@ $('undo-edit').addEventListener('click', undoEdit);
 function paint(coordinate) {
   const old = map.tiles.get(coordinate) ?? ' ';
   if (brush === 'pusher' || brush === 'power') {
-    if ('$*@+'.includes(old)) {
+    if ('$*'.includes(old)) {
       setMapNote('请把装置放在空格或目标格上。', 'error');
       return;
     }
@@ -581,7 +581,7 @@ function paint(coordinate) {
   if (!sameHost) portals.forEach((end, i) => { if (end.cell === coordinate) removed.add(Math.floor(i / 2)); });
   const finish = tile === '#' && level.finish === coordinate ? null : level.finish ?? null;
   const changes = { tiles, portals: portals.filter((_, i) => !removed.has(Math.floor(i / 2))), finish };
-  if ('$*@+'.includes(tile) && level.devices?.has(coordinate)) {
+  if ('$*'.includes(tile) && level.devices?.has(coordinate)) {
     changes.devices = new Map(level.devices);
     changes.devices.delete(coordinate);
   }
@@ -794,7 +794,7 @@ document.addEventListener('keydown', event => {
     return;
   }
   const direction = movementKeys[pressed];
-  if (pressed !== 'z' && typeof direction !== 'number') return;
+  if (pressed !== 'z' && (manual.player === -1 || typeof direction !== 'number')) return;
   event.preventDefault();
   const key = keyIdentity(event);
   if (event.repeat || heldDirections.has(key)) return;
@@ -1237,7 +1237,7 @@ $('help').addEventListener('click', () => {
     '<p>用「传送门」依次点选墙或箱子的两条边。双向门两端都能进入。选「单向」后，先点入口，再点出口。一个入口只有一个去向，标着「出」的端点可以接收多条连接。点已有端点可管理连接。</p>' +
     '<p>出口和另一个入口正对紧贴时，会继续通过下一对门。开启连推时，整排箱子先一起前进，最前面的箱子碰墙后才触发门箱传送。依次尝试后箱、前箱和玩家，没门或传不通就试下一项。前箱传走的同一步，门箱和它后面被推动的箱子会向前补一格。关闭连推时，门箱沿门面推到前箱就先传走前箱。没有可执行的推箱动作时，玩家可以从碰到的门面进入，即使门箱背后紧贴的是普通箱子。若最终出口有箱子并且推得动，玩家会在同一步穿门走到让出的格子。</p>' +
     '<p>开始训练后，左侧地图会显示 AI 的每一步。可在「观战 AI」中调速度或暂停。进入手动试玩会暂停训练，回到训练区可继续。</p>' +
-    '<p>「方块推推推」用推头把箱子推进目标。选定装置朝向再放置。无电源时直接点推头。有电源时走到电源旁再点，电源箭头须对准相邻推头的背面。每次启动推一格，开启连推可以推动前方连续的多个方块。</p>' +
+    '<p>「方块推推推」用推头把箱子推进目标。无电源时直接点推头。有电源时点箭头指向相邻推头的电源。推头沿自己的箭头推一格，开启连推可以推动前方连续的多个方块。</p>' +
     '<p>点「示范几步」录下开局或通关路线，再点「保存示范」。胜率只统计 AI 独立尝试。</p>' +
     '<p>AI 用 Q-learning 反复练习。训练区包含已绘制的地图和外围三格空地，最多 40,000 格。找到通关路线后即可回放。</p>' +
     '<p>用关卡列表逐关训练。切换时会暂停当前训练，切回即可继续。示范、地图和规则保存在浏览器。修改地图或规则会清空当前关的示范和训练进度。</p>',
