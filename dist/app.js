@@ -30,6 +30,7 @@ function loadLevels() {
 
 const library = loadLevels();
 const sessions = new Map();
+const editHistories = new WeakMap();
 let level = library.entries[library.index];
 let map = world(level.tiles, level.chainPush, level.portals, level.finish);
 let area = bounds(map.tiles, map.finish);
@@ -243,6 +244,7 @@ function renderMap() {
   $('play-mode').setAttribute('aria-pressed', playing);
   $('watch-mode').setAttribute('aria-pressed', watching);
   $('edit-tools').hidden = !editing;
+  $('undo-edit').disabled = !pendingPortal && !editHistories.get(level)?.length;
   $('play-tools').hidden = !playing;
   $('watch-tools').hidden = !watching;
   $('stop-replay').hidden = mode !== 'replay' || !playback;
@@ -432,7 +434,39 @@ function addLevels(entries) {
   selectLevel(first);
 }
 
-function changeMap(tiles, recenter = false, chainPush = level.chainPush, portals = level.portals ?? [], finish = map.finish) {
+function editMap(tiles, recenter = false, chainPush = level.chainPush, portals = level.portals ?? [], finish = map.finish) {
+  let history = editHistories.get(level);
+  if (!history) {
+    history = [];
+    editHistories.set(level, history);
+  }
+  if (!gesture?.edit || history.at(-1) !== gesture.edit) {
+    const snapshot = {
+      tiles: level.tiles,
+      chainPush: level.chainPush,
+      portals: level.portals ?? [],
+      finish: map.finish,
+      demonstration: level.demonstration,
+    };
+    history.push(snapshot);
+    if (history.length > 100) history.shift();
+    if (gesture && !gesture.pan) gesture.edit = snapshot;
+  }
+  changeMap(tiles, recenter, chainPush, portals, finish);
+}
+
+function undoEdit() {
+  if (mode !== 'edit') return;
+  if (pendingPortal) {
+    cancelPortalSelection();
+    return;
+  }
+  const snapshot = editHistories.get(level)?.pop();
+  if (!snapshot) return;
+  changeMap(snapshot.tiles, false, snapshot.chainPush, snapshot.portals, snapshot.finish, snapshot.demonstration);
+}
+
+function changeMap(tiles, recenter, chainPush, portals, finish, demonstration = []) {
   stopActivity();
   sessions.delete(level);
   trainer = null;
@@ -443,7 +477,7 @@ function changeMap(tiles, recenter = false, chainPush = level.chainPush, portals
   level.chainPush = chainPush;
   level.portals = portals;
   level.finish = finish;
-  level.demonstration = [];
+  level.demonstration = demonstration;
   saveLevels();
   loadBoard(recenter);
 }
@@ -451,7 +485,8 @@ function changeMap(tiles, recenter = false, chainPush = level.chainPush, portals
 $('current-level').addEventListener('change', event => selectLevel(Number(event.target.value)));
 $('prev-level').addEventListener('click', () => selectLevel(library.index - 1));
 $('next-level').addEventListener('click', () => selectLevel(library.index + 1));
-$('chain-push').addEventListener('change', event => changeMap(map.tiles, false, event.target.checked));
+$('chain-push').addEventListener('change', event => editMap(map.tiles, false, event.target.checked));
+$('undo-edit').addEventListener('click', undoEdit);
 
 function paint(coordinate) {
   const old = map.tiles.get(coordinate) ?? ' ';
@@ -461,11 +496,11 @@ function paint(coordinate) {
       $('map-note').classList.add('error');
       return;
     }
-    changeMap(map.tiles, false, level.chainPush, level.portals, map.finish === coordinate ? null : coordinate);
+    editMap(map.tiles, false, level.chainPush, level.portals, map.finish === coordinate ? null : coordinate);
     return;
   }
   if (brush === ' ' && map.finish === coordinate) {
-    changeMap(map.tiles, false, level.chainPush, level.portals, null);
+    editMap(map.tiles, false, level.chainPush, level.portals, null);
     return;
   }
   const wasGoal = '.*+'.includes(old);
@@ -490,7 +525,7 @@ function paint(coordinate) {
   const removed = new Set();
   if (!sameHost) portals.forEach((end, i) => { if (end.cell === coordinate) removed.add(Math.floor(i / 2)); });
   const finish = tile === '#' && map.finish === coordinate ? null : map.finish;
-  changeMap(tiles, false, level.chainPush, portals.filter((_, i) => !removed.has(Math.floor(i / 2))), finish);
+  editMap(tiles, false, level.chainPush, portals.filter((_, i) => !removed.has(Math.floor(i / 2))), finish);
 }
 
 function cellAt(element) {
@@ -521,8 +556,8 @@ function choosePortalFace(coordinate, side) {
     portalMessage = '这条边已有去向，请选择另一条边。';
   } else {
     const exit = oneWay ? { cell: coordinate, side, exitOnly: true } : { cell: coordinate, side };
-    changeMap(map.tiles, false, level.chainPush, [...portals, pendingPortal, exit]);
-    portalMessage = (oneWay ? '单向' : '双向') + '传送门 ' + (portals.length / 2 + 1) + ' 已建立。';
+    editMap(map.tiles, false, level.chainPush, [...portals, pendingPortal, exit]);
+    portalMessage = (oneWay ? '单向' : '双向') + '传送门 ' + (portals.length / 2 + 1) + ' 已建立，可按 Z 撤销。';
   }
   renderMap();
 }
@@ -545,7 +580,7 @@ function managePortalFace(coordinate, side, portals, hasEntrance) {
     const number = i / 2 + 1;
     const kind = to.exitOnly ? (atFace(from) ? '单向入口' : '单向出口') : '双向门';
     list.append(actionButton('移除' + kind + ' ' + number, '', () => {
-      changeMap(map.tiles, false, level.chainPush, portals.filter((_, index) => index !== i && index !== i + 1));
+      editMap(map.tiles, false, level.chainPush, portals.filter((_, index) => index !== i && index !== i + 1));
       dialog.close();
     }));
   }
@@ -652,16 +687,13 @@ document.querySelectorAll('[data-brush]').forEach(button => {
     renderMap();
   });
 });
-$('portal-cancel').addEventListener('click', () => {
+function cancelPortalSelection() {
   pendingPortal = null;
   portalMessage = '';
   renderMap();
-});
-oneWayPortal.addEventListener('change', () => {
-  pendingPortal = null;
-  portalMessage = '';
-  renderMap();
-});
+}
+$('portal-cancel').addEventListener('click', cancelPortalSelection);
+oneWayPortal.addEventListener('change', cancelPortalSelection);
 $('edit-mode').addEventListener('click', () => setMode('edit'));
 $('play-mode').addEventListener('click', () => setMode('play'));
 $('watch-mode').addEventListener('click', () => setMode('watch'));
@@ -683,20 +715,22 @@ document.querySelectorAll('[data-dir]').forEach(button => button.addEventListene
 const movementKeys = { arrowup: 0, w: 0, arrowright: 1, d: 1, arrowdown: 2, s: 2, arrowleft: 3, a: 3 };
 const keyIdentity = event => event.code || event.key.toLowerCase();
 document.addEventListener('keydown', event => {
-  if (mode !== 'play' || dialog.open || event.altKey || event.ctrlKey || event.metaKey ||
+  if (dialog.open || event.isComposing || event.altKey || event.ctrlKey || event.metaKey ||
       event.target.closest('input, textarea, select')) return;
+  const pressed = event.key.toLowerCase();
+  if (mode !== 'play' && (mode !== 'edit' || pressed !== 'z')) return;
   if (event.key === 'Enter' && event.repeat && event.target.closest('[data-dir]')) {
     event.preventDefault();
     return;
   }
-  const pressed = event.key.toLowerCase();
   const direction = movementKeys[pressed];
   if (pressed !== 'z' && typeof direction !== 'number') return;
   event.preventDefault();
   const key = keyIdentity(event);
   if (event.repeat || heldDirections.has(key)) return;
   heldDirections.add(key);
-  if (pressed === 'z') undoMove();
+  if (mode === 'edit') undoEdit();
+  else if (pressed === 'z') undoMove();
   else move(direction);
 });
 document.addEventListener('keyup', event => heldDirections.delete(keyIdentity(event)));
@@ -1117,7 +1151,7 @@ function confirmSaveChange(deleting) {
     actionButton('返回', 'outline plain', manageSave),
     actionButton('确认' + verb, 'primary danger', () => {
       if (deleting) deleteLevel();
-      else changeMap(new Map(), true, false, [], null);
+      else editMap(new Map(), true, false, [], null);
       dialog.close();
     }),
   ]);
@@ -1167,7 +1201,7 @@ $('map-code').addEventListener('click', () => {
     actionButton('导入文本', 'primary', () => {
       try {
         const imported = readLevel($('map-text').value);
-        changeMap(imported.tiles, true, imported.chainPush, imported.portals ?? [], imported.finish ?? null);
+        editMap(imported.tiles, true, imported.chainPush, imported.portals ?? [], imported.finish ?? null);
         dialog.close();
       } catch (error) {
         dialogError(error.message);

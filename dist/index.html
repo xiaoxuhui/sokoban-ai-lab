@@ -8,7 +8,7 @@
   <title>推箱子实验室</title>
   <link rel="stylesheet" href="style.css?v=29">
   <script src="engine.js?v=29" defer></script>
-  <script src="app.js?v=29" defer></script>
+  <script src="app.js?v=30" defer></script>
 </head>
 <body>
   <header class="top">
@@ -57,6 +57,7 @@
             <button type="button" data-brush="portal" aria-pressed="false"><i class="sample portal-sample"></i>传送门</button>
             <button type="button" data-brush=" " aria-pressed="false"><i class="sample eraser"></i>橡皮</button>
           </div>
+          <button class="outline" id="undo-edit" type="button" aria-keyshortcuts="Z" disabled>↶ 撤销编辑 <kbd>Z</kbd></button>
           <div class="secondary" id="finish-status"></div>
           <div class="portal-tools">
             <label id="portal-direction-label" hidden>连接方向 <select id="portal-direction"><option value="two-way">双向</option><option value="one-way">单向</option></select></label>
