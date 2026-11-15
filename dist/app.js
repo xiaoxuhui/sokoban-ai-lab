@@ -16,11 +16,14 @@ function loadLevels() {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey));
     if (Array.isArray(saved?.levels) && saved.levels.length) {
-      const entries = saved.levels.map(({ name, code, demonstration }) => ({
-        name, ...readLevel(code),
-        demonstration: Array.isArray(demonstration) ? demonstration.filter(direction =>
-          Number.isInteger(direction) && direction >= 0 && direction <= 3) : [],
-      }));
+      const entries = saved.levels.map(({ name, code, demonstration }) => {
+        const layout = readLevel(code);
+        const clicks = layout.gameplay === 'powered' || layout.gameplay === 'direct';
+        const inputs = Array.isArray(demonstration) ? demonstration.filter(input => clicks ?
+          typeof input === 'string' && /^-?\d+,-?\d+$/.test(input) :
+          Number.isInteger(input) && input >= 0 && input <= 3) : [];
+        return { name, ...layout, demonstration: inputs };
+      });
       return { entries, index: entries[saved.index] ? saved.index : 0 };
     }
   } catch { /* Try the previous format. */ }
@@ -86,9 +89,10 @@ function centerMap() {
   }
 }
 
-function followPlayer(state) {
-  if (state.player === -1) return;
-  const [x, y] = point(state.player);
+function followPosition(state) {
+  const coordinate = state.lastClick ?? state.player;
+  if (coordinate === -1) return;
+  const [x, y] = point(coordinate);
   const size = cellSize();
   if (Math.abs(x + 0.5 - camera.x) > viewWidth / size / 2 - 1.5 ||
       Math.abs(y + 0.5 - camera.y) > viewHeight / size / 2 - 1.5) {
@@ -140,6 +144,7 @@ function renderBoard(state, previous = null) {
   const changed = full ? null : changedCells(previous, state, boxes);
   const editable = mode === 'edit';
   const linking = editable && brush === 'portal';
+  const aiClick = mode === 'watch' || mode === 'replay' ? state.lastClick : null;
   const marks = new Map();
   state.portalCells.forEach((coordinate, index) => {
     if (changed && !changed.has(coordinate)) return;
@@ -161,6 +166,7 @@ function renderBoard(state, previous = null) {
     const signature = ends.map(({ side, pair, kind }) => side + ':' + pair + (kind ? ':' + kind : '')).join(',');
     const device = state.devices?.get(coordinate);
     const deviceMark = device ? device.kind + ':' + device.direction : '';
+    cell.classList.toggle('ai-clicked', coordinate === aiClick);
     const interactive = editable || (mode === 'play' && device?.kind === (map.gameplay === 'powered' ? 'power' : 'pusher'));
     if (cell.disabled === interactive) cell.disabled = !interactive;
     if (cell.tabIndex !== (interactive ? 0 : -1)) cell.tabIndex = interactive ? 0 : -1;
@@ -255,9 +261,7 @@ function renderMap() {
   const watching = mode === 'watch';
   const devices = Boolean(map.initial.devices);
   $('gameplay').value = map.gameplay;
-  $('workspace').classList.toggle('pusher-mode', devices);
-  $('train-panel').hidden = devices;
-  $('watch-mode').hidden = devices;
+  $('best-label').textContent = devices ? '最佳操作次数' : '最佳推箱次数';
   $('chain-push-label').textContent = devices ? '允许连推多个方块' : '允许连推多个箱子';
   for (const tool of brushButtons) {
     if (tool.hasAttribute('data-classic')) tool.hidden = devices;
@@ -298,7 +302,7 @@ function renderMap() {
   }
   const problem = editing || watching ? validate(map) || (watching ? trainingProblem : '') : '';
   const solved = !editing && won(map, state);
-  const note = problem || (editing ? (devices ? '地图可试玩' : '地图可试玩和训练') :
+  const note = problem || (editing ? '地图可试玩和训练' :
     watching ? watchNote(state, solved) : '');
   setMapNote(note, problem ? 'error' : solved ? 'success' : '');
   if (mode === 'replay') renderReplayControls(state, solved);
@@ -306,7 +310,7 @@ function renderMap() {
     const episode = Math.min((trainer?.episodes ?? 0) + Number(watchResult === null), batch?.target ?? 0);
     $('watch-progress').textContent = (episode ? '第 ' + number.format(episode) + ' 回合 · ' : '') +
       (watchSegment?.demonstration ? '跟随示范 · ' : '') +
-      '移动 ' + state.moves + ' 步 · 推箱 ' + state.pushes + ' 次';
+      stateProgress(state);
   }
   renderBoard(state);
 }
@@ -326,17 +330,21 @@ function renderManual(previous = null) {
   renderMoveCount();
   const covered = placed(map, manual);
   const solved = won(map, manual, covered);
-  let message = recording ? (solved ? '示范已通关，可以保存。' : '示范中。走几步或推几次箱后即可保存。') :
+  const demoHint = manual.devices ? '示范中。点几次装置后即可保存。' : '示范中。走几步或推几次箱后即可保存。';
+  let message = recording ? (solved ? '示范已通关，可以保存。' : demoHint) :
     (solved ? '通关！' : objectiveProgress(manual, covered));
   if (manual.devices && !solved) message += map.gameplay === 'powered' ? ' · 点击电源' : ' · 点击拉推头';
   setMapNote(message, solved ? 'success' : '');
 }
 
 function renderMoveCount() {
-  const text = manual.devices ? '操作 ' + manual.moves + ' 次 · 推拉 ' + manual.pushes + ' 次' :
-    '移动 ' + manual.moves + ' 步 · 推箱 ' + manual.pushes + ' 次';
+  const text = stateProgress(manual);
   const count = $('move-count');
   if (count.textContent !== text) count.textContent = text;
+}
+
+function stateProgress(state) {
+  return state.devices ? '操作 ' + state.moves + ' 次' : '移动 ' + state.moves + ' 步 · 推箱 ' + state.pushes + ' 次';
 }
 
 function objectiveProgress(state, covered = placed(map, state)) {
@@ -355,7 +363,6 @@ function watchNote(state, solved) {
 }
 
 function setMode(next) {
-  if (next === 'watch' && map.initial.devices) return;
   if (next === 'play' && validate(map)) {
     $('map-note').textContent = validate(map);
     return;
@@ -370,12 +377,12 @@ function setMode(next) {
   mode = next;
   if (mode === 'play') {
     pauseTraining();
-    followPlayer(manual);
+    followPosition(manual);
   }
   if (mode === 'watch') {
     nextWatchAt = 0;
     if (!watchState && trainer) syncWatchState();
-    followPlayer(activeState());
+    followPosition(activeState());
   }
   renderMap();
   renderTraining();
@@ -724,7 +731,7 @@ board.addEventListener('click', event => {
   const coordinate = cellAt(event.target);
   if (mode === 'play' && coordinate && manual.devices && !dialog.open && !document.hidden && !won(map, manual)) {
     const result = activateDevice(map, manual, coordinate);
-    if (result.state !== manual) commitManualAction(result.state);
+    if (result.state !== manual) commitManualAction(result.state, coordinate);
     else if (result.message) setMapNote(result.message, 'error');
     return;
   }
@@ -752,7 +759,7 @@ new ResizeObserver(() => {
 }).observe(board);
 $('center-map').addEventListener('click', () => {
   centerMap();
-  if (mode !== 'edit') followPlayer(activeState());
+  if (mode !== 'edit') followPosition(activeState());
   renderBoard(activeState());
 });
 
@@ -783,12 +790,12 @@ function move(direction) {
   commitManualAction(next, direction);
 }
 
-function commitManualAction(next, direction) {
+function commitManualAction(next, input) {
   const previous = manual;
   undo.push(previous);
-  if (!manual.devices) manualPath.push(direction);
+  manualPath.push(input);
   manual = next;
-  followPlayer(manual);
+  followPosition(manual);
   renderManual(previous);
 }
 
@@ -824,7 +831,7 @@ function undoMove() {
   const previous = manual;
   manual = undo.pop();
   manualPath.pop();
-  followPlayer(manual);
+  followPosition(manual);
   renderManual(previous);
 }
 $('undo').addEventListener('click', undoMove);
@@ -832,7 +839,7 @@ function resetPlay() {
   manual = map.initial;
   undo = [];
   manualPath = [];
-  followPlayer(manual);
+  followPosition(manual);
   renderMap();
 }
 
@@ -840,6 +847,7 @@ $('reset-play').addEventListener('click', resetPlay);
 
 function getTrainer() {
   if (trainer) return trainer;
+  if (map.initial.devices) return new Trainer(map);
   const field = trainingMap(map.tiles, area, level.chainPush, level.portals, map.finish);
   if (field) return new Trainer(field);
   trainingProblem = '摆放范围超过 40,000 格训练区。请缩小关卡范围后再试。';
@@ -879,7 +887,8 @@ $('cancel-demo').addEventListener('click', () => {
 $('save-demo').addEventListener('click', () => {
   if (!recording || !manualPath.length) return;
   if (!updateDemonstration(manualPath)) {
-    $('map-note').textContent = trainingProblem || '示范走出了 AI 的训练区。请撤销超出地图外围三格的步数。';
+    $('map-note').textContent = trainingProblem || (manual.devices ? '示范动作不适用于当前地图。' :
+      '示范走出了 AI 的训练区。请撤销超出地图外围三格的步数。');
     $('map-note').classList.add('error');
   }
 });
@@ -980,7 +989,8 @@ function renderTraining() {
   else if ((running || paused) && waitingForRecord) note = batch.previousBest ?
     '本批会在最佳路线更新后停止。' : '本批会在首次通关后停止。';
   else if (running || paused) note = '本批目标为第 ' + number.format(batch.target) + ' 回合，切换关卡时会暂停。';
-  else if (waitingForRecord && best) note = '最佳路线已更新 · 推箱 ' + best.pushes + ' 次 · 移动 ' + best.path.length + ' 步';
+  else if (waitingForRecord && best) note = '最佳路线已更新 · ' +
+    stateProgress({ devices: map.initial.devices, pushes: best.pushes, moves: best.path.length });
   else if (best) note = '已通关 ' + number.format(trainer.successes) + ' 局 · 最佳路线移动 ' + best.path.length + ' 步';
   else if (episodes) note = '尚未通关，可以查看目前覆盖最多的路线。';
   $('training-note').textContent = note;
@@ -1016,6 +1026,7 @@ function renderPartialRoutes(best) {
 
 function toWorldState(state) {
   const coordinate = trainer.map.worldCell;
+  if (!coordinate) return state;
   return { ...state, player: coordinate(state.player), boxes: state.boxes.map(coordinate), portalCells: state.portalCells.map(coordinate) };
 }
 
@@ -1067,7 +1078,7 @@ function trainFrame(now) {
   if (batchComplete()) running = false;
   if (advanced) {
     if (mode === 'watch') {
-      if (!gesture?.pan) followPlayer(watchState);
+      if (!gesture?.pan) followPosition(watchState);
       renderMap();
     }
     renderTraining();
@@ -1076,7 +1087,6 @@ function trainFrame(now) {
 }
 
 function toggleTraining() {
-  if (map.initial.devices) return;
   if (running) pauseTraining();
   else {
     if (validate(map) || recording) return;
@@ -1178,7 +1188,7 @@ function renderReplayControls(state, solved) {
   if ($('replay-toggle').textContent !== toggleLabel) $('replay-toggle').textContent = toggleLabel;
   const title = firstNumber ? '路线 ' + number.format(firstNumber + routeIndex) : 'AI 回放';
   let progress = title + ' · ' + index + ' / ' + length + ' 步';
-  if (atEnd) progress += solved ? ' · 通关 · 推箱 ' + state.pushes + ' 次' :
+  if (atEnd) progress += solved ? ' · 通关' + (state.devices ? '' : ' · 推箱 ' + state.pushes + ' 次') :
     ' · 覆盖 ' + placed(map, state) + ' / ' + map.goals.size + ' 个目标';
   if ($('replay-progress').textContent !== progress) $('replay-progress').textContent = progress;
 }
@@ -1187,7 +1197,7 @@ function showReplayStep(index) {
   const { states } = replay;
   if (index === states.length) states.push(step(map, states[index - 1], replayPath()[index - 1]));
   replay.index = index;
-  if (!gesture?.pan) followPlayer(states[index]);
+  if (!gesture?.pan) followPosition(states[index]);
 }
 
 function stepReplay(delta) {

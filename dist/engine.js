@@ -318,6 +318,7 @@
   }
 
   function step(map, state, direction) {
+    if (state.devices) return typeof direction === 'string' ? activateDevice(map, state, direction).state : state;
     if (state.player === -1 || !directions[direction]) return state;
     if (map.portalSides.length) return portalStep(map, state, direction);
     const player = map.neighbor(state.player, direction);
@@ -361,14 +362,18 @@
       if (!occupied(beyond)) return { state, message: '拉推头前方两格内没有方块。' };
       moved.set(beyond, front);
     }
-    const nextDevices = new Map();
-    for (const [position, device] of devices) {
-      nextDevices.set(moved.get(position) ?? position, device);
+    let movesDevice = false;
+    let movesBox = false;
+    for (const position of moved.keys()) {
+      if (devices.has(position)) movesDevice = true;
+      else movesBox = true;
     }
-    const nextBoxes = state.boxes.map(position => moved.get(position) ?? position);
+    const nextDevices = movesDevice ? new Map([...devices].map(([position, device]) =>
+      [moved.get(position) ?? position, device])) : devices;
+    const nextBoxes = movesBox ? state.boxes.map(position => moved.get(position) ?? position) : state.boxes;
     return { state: {
       ...state, boxes: nextBoxes, devices: nextDevices,
-      moves: state.moves + 1, pushes: state.pushes + 1,
+      moves: state.moves + 1, pushes: state.pushes + 1, lastClick: cell,
     } };
   }
 
@@ -622,7 +627,22 @@
     return distances;
   }
 
+  function deviceChoices(map, state) {
+    const clickKind = map.gameplay === 'powered' ? 'power' : 'pusher';
+    const layout = [];
+    const actions = [];
+    for (const [cell, { kind, direction }] of state.devices) {
+      layout.push(cell + ':' + kind + ':' + direction);
+      if (kind !== clickKind) continue;
+      const next = activateDevice(map, state, cell).state;
+      if (next !== state) actions.push({ id: cell, next });
+    }
+    const key = state.boxes.slice().sort().join(';') + '|' + layout.sort().join(';');
+    return { key, actions, finishReachable: false };
+  }
+
   function choices(map, state, distances) {
+    if (state.devices) return deviceChoices(map, state);
     const area = reach(map, state);
     const actions = [];
     const hasPortals = map.portalSides.length > 0;
@@ -675,7 +695,7 @@
     constructor(map, random = Math.random) {
       this.map = map;
       this.random = random;
-      this.distances = distancesToGoals(map);
+      this.distances = map.initial.devices ? null : distancesToGoals(map);
       this.q = new Map();
       this.episodes = 0;
       this.successes = 0;
@@ -688,7 +708,7 @@
       this.demonstration = null;
       this.guidedStart = 0;
       this.guided = false;
-      this.maxPushes = Math.min(160, Math.max(35, map.initial.boxes.length * 28));
+      this.maxPushes = Math.min(160, Math.max(35, map.initial.boxes.length * 28, (map.initial.devices?.size ?? 0) * 4));
     }
 
     setDemonstration(directions) {
@@ -704,7 +724,8 @@
         if (next.pushes > state.pushes) {
           milestones.push({ state: next, length: next.moves });
           const { key, actions } = choices(map, decision, this.distances);
-          const action = actions.find(candidate => candidate.from === state.player && candidate.direction === direction);
+          const action = actions.find(candidate => state.devices ? candidate.id === direction :
+            candidate.from === state.player && candidate.direction === direction);
           if (action) {
             trace.push([key, action, this.reward(decision, next, action, false)]);
             demonstrated.set(key, { action, actions });
@@ -741,6 +762,7 @@
     }
 
     estimate(action) {
+      if (!this.distances) return 0;
       const from = this.distances[action.box];
       const to = this.distances[action.to];
       return from === undefined || to === undefined || from < 0 || to < 0 ? 0 : 0.24 * (from - to);
@@ -778,7 +800,7 @@
         this.partial = { covered, moves: length, routes: new Map() };
       }
       const prefix = path.slice(0, length);
-      this.partial.routes.set(prefix.join(''), { path: prefix, pushes: state.pushes });
+      this.partial.routes.set(prefix.join(';'), { path: prefix, pushes: state.pushes });
     }
 
     *attempt() {
@@ -811,11 +833,17 @@
             if (this.value(current.key, candidate) > this.value(current.key, action)) action = candidate;
           }
         }
-        const walking = walkingPath(current.area, state.player, action.from);
         const beforePush = state;
-        const nextState = step(map, { ...state, player: action.from, moves: state.moves + walking.length }, action.direction);
-        walking.push(action.direction);
-        path.push(...walking);
+        let inputs, nextState;
+        if (action.next) {
+          inputs = [action.id];
+          nextState = action.next;
+        } else {
+          inputs = walkingPath(current.area, state.player, action.from);
+          nextState = step(map, { ...state, player: action.from, moves: state.moves + inputs.length }, action.direction);
+          inputs.push(action.direction);
+        }
+        path.push(...inputs);
         const next = choices(map, nextState, this.distances);
         const solved = next.finishReachable || won(map, nextState);
         const stuck = next.actions.length === 0;
@@ -829,7 +857,7 @@
         state = this.state = nextState;
         this.keepPartial(state, path);
         current = next;
-        yield { from: beforePush, directions: walking };
+        yield { from: beforePush, directions: inputs };
       }
 
       if (current.finishReachable && state.player !== map.finish) {
