@@ -267,6 +267,7 @@ function renderMap() {
   }
   for (const tool of brushButtons) tool.setAttribute('aria-pressed', tool.dataset.brush === brush);
   $('device-direction-label').hidden = brush !== 'pusher' && brush !== 'power';
+  $('device-rotate-help').hidden = !devices;
   const linking = editing && brush === 'portal';
   const state = activeState();
   $('edit-mode').setAttribute('aria-pressed', editing);
@@ -593,6 +594,10 @@ function cellAt(element) {
   return cell && board.contains(cell) ? cell.dataset.cell : null;
 }
 
+function rotatableDeviceAt(coordinate) {
+  if (brush !== ' ') return map.initial.devices?.get(coordinate);
+}
+
 function choosePortalFace(coordinate, side) {
   if (!portalHost(map.tiles.get(coordinate))) {
     portalMessage = '请选择墙或箱子的边。';
@@ -693,7 +698,7 @@ board.addEventListener('pointerdown', event => {
   const pan = event.button === 2;
   const coordinate = cellAt(event.target);
   if (gesture || (!pan && (mode !== 'edit' || event.button !== 0 || !coordinate))) return;
-  if (!pan && (brush === 'portal' || brush === 'finish')) return;
+  if (!pan && (brush === 'portal' || brush === 'finish' || rotatableDeviceAt(coordinate))) return;
   event.preventDefault();
   gesture = { id: event.pointerId, pan, x: event.clientX, y: event.clientY, camera, lastCell: null };
   board.setPointerCapture(event.pointerId);
@@ -724,7 +729,13 @@ board.addEventListener('click', event => {
     return;
   }
   if (mode !== 'edit' || !coordinate) return;
-  if (brush === 'portal') portalClick(event, coordinate);
+  const device = rotatableDeviceAt(coordinate);
+  if (device) {
+    const devices = new Map(level.devices);
+    const direction = (device.direction + (event.ctrlKey ? 3 : 1)) % 4;
+    devices.set(coordinate, { ...device, direction });
+    editMap({ devices });
+  } else if (brush === 'portal') portalClick(event, coordinate);
   else if (brush === 'finish' || event.detail === 0) paint(coordinate);
 });
 
