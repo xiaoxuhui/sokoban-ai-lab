@@ -189,14 +189,14 @@
       }
       devices.set(cell, { kind, direction });
     }
-    return { tiles, chainPush: data.chainPush === true, portals, finish, gameplay, devices };
+    return { tiles, chainPush: data.chainPush === true, portals, finish, gameplay, devices, unlimitedTraining: data.unlimitedTraining !== false };
   }
 
   function readWorld(text) {
     return readLevel(text).tiles;
   }
 
-  function writeWorld(tiles, chainPush = false, portals = [], finish = null, { gameplay = 'classic', devices } = {}) {
+  function writeWorld(tiles, chainPush = false, portals = [], finish = null, { gameplay = 'classic', devices, unlimitedTraining = true } = {}) {
     const lines = [...tiles].map(([cell, tile]) => JSON.stringify([...point(cell), tile]));
     const pairs = [];
     for (let i = 0; i < portals.length; i += 2) {
@@ -209,10 +209,11 @@
     const gameplayField = gameplay === 'classic' ? '' : ',\n  "gameplay": ' + JSON.stringify(gameplay);
     const deviceField = devices?.size ? ',\n  "devices": [\n    ' + [...devices].map(([cell, { kind, direction }]) =>
       JSON.stringify([...point(cell), kind, direction])).join(',\n    ') + '\n  ]' : '';
-    return '{\n  "version": 1,\n  "chainPush": ' + chainPush + ',\n  "tiles": [' + (lines.length ? '\n    ' + lines.join(',\n    ') + '\n  ' : '') + links + finishField + gameplayField + deviceField + '\n}';
+    const trainingField = unlimitedTraining ? '' : ',\n  "unlimitedTraining": false';
+    return '{\n  "version": 1,\n  "chainPush": ' + chainPush + ',\n  "tiles": [' + (lines.length ? '\n    ' + lines.join(',\n    ') + '\n  ' : '') + links + finishField + gameplayField + deviceField + trainingField + '\n}';
   }
 
-  function world(tiles, chainPush = false, portals = [], finish = null, { gameplay = 'classic', devices = new Map() } = {}) {
+  function world(tiles, chainPush = false, portals = [], finish = null, { gameplay = 'classic', devices = new Map(), unlimitedTraining = true } = {}) {
     const goals = new Set();
     const boxes = [];
     let player = -1;
@@ -236,7 +237,7 @@
       initial.devices = gameplay === 'direct' ? new Map([...devices].filter(([, device]) => device.kind === 'pusher')) : devices;
     } else initial.portalCells = portals.map(end => end.cell);
     return {
-      tiles, goals, finish, chainPush, gameplay, isWall, adjacent, portalSides: portals.map(end => end.side),
+      tiles, goals, finish, chainPush, gameplay, unlimitedTraining, isWall, adjacent, portalSides: portals.map(end => end.side),
       portalIndex: indexPortals(portals, isWall, adjacent),
       initial,
       neighbor(cell, direction) {
@@ -712,7 +713,12 @@
       this.demonstration = null;
       this.guidedStart = 0;
       this.guided = false;
-      this.maxPushes = map.initial.devices ? Infinity : Math.min(160, Math.max(35, map.initial.boxes.length * 28));
+    }
+
+    get maxPushes() {
+      const { devices, boxes } = this.map.initial;
+      if (devices && this.map.unlimitedTraining) return Infinity;
+      return Math.min(160, Math.max(35, boxes.length * 28, (devices?.size ?? 0) * 4));
     }
 
     setDemonstration(directions) {
@@ -816,7 +822,9 @@
       const opening = this.demonstration;
       const sinceDemo = this.episodes - this.guidedStart;
       const demonstratedPushes = opening?.complete ? opening.state.pushes : 0;
-      this.guided = Boolean(opening && (opening.complete ? sinceDemo === 0 : sinceDemo % 2 === 0));
+      const maxPushes = this.maxPushes;
+      const canUseOpening = opening && (!state.devices || opening.state.pushes <= maxPushes);
+      this.guided = Boolean(canUseOpening && (opening.complete ? sinceDemo === 0 : sinceDemo % 2 === 0));
       // A successful demonstration gives independent episodes a policy to exploit.
       const epsilon = opening?.complete ?
         (sinceDemo % 4 === 0 ? 1 / Math.max(demonstratedPushes, 4) : 0) : this.epsilon;
@@ -827,7 +835,7 @@
         state = this.state = opening.state;
         yield { from: map.initial, directions: opening.directions, demonstration: true };
       }
-      const pushLimit = state.pushes + Math.max(this.maxPushes, demonstratedPushes);
+      const pushLimit = state.devices ? maxPushes : state.pushes + Math.max(maxPushes, demonstratedPushes);
       const visited = state.devices ? new Set() : undefined;
       let current = choices(map, state, this.distances, visited);
       while (current.actions.length && state.pushes < pushLimit && !current.finishReachable && !won(map, state)) {

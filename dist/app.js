@@ -854,15 +854,17 @@ function getTrainer() {
   return null;
 }
 
+function resetAttempt() {
+  attempt = null;
+  watchState = null;
+  watchSegment = null;
+  watchResult = null;
+}
+
 function updateDemonstration(path) {
   const model = getTrainer();
   if (!model || !model.setDemonstration(path)) return false;
-  if (trainer) {
-    attempt = null;
-    watchState = null;
-    watchSegment = null;
-    watchResult = null;
-  }
+  if (trainer) resetAttempt();
   level.demonstration = path.slice();
   recording = false;
   saveLevels();
@@ -968,6 +970,9 @@ function renderTraining() {
   $('watch-run').disabled = $('train').disabled;
   $('train').firstElementChild.textContent = running ? 'Ⅱ' : '▶';
   $('budget').disabled = running || (paused && !waitingForRecord);
+  $('unlimited-training-option').hidden = !map.initial.devices;
+  $('unlimited-training').checked = map.unlimitedTraining;
+  $('unlimited-training').disabled = running;
   $('clear-training').disabled = !trainer || playback !== 0 || recording;
   $('replay').disabled = !best || running || playback !== 0 || recording;
   $('replay-single').disabled = $('replay').disabled;
@@ -1117,15 +1122,26 @@ function toggleTraining() {
 
 $('train').addEventListener('click', toggleTraining);
 $('watch-run').addEventListener('click', toggleTraining);
+$('unlimited-training').addEventListener('change', event => {
+  if (running || !map.initial.devices) return;
+  level.unlimitedTraining = map.unlimitedTraining = event.target.checked;
+  if (trainer) {
+    trainer.map.unlimitedTraining = map.unlimitedTraining;
+    if (attempt) {
+      trainer.state = trainer.map.initial;
+      resetAttempt();
+    }
+  }
+  saveLevels();
+  renderMap();
+  renderTraining();
+});
 $('clear-training').addEventListener('click', () => {
   pauseTraining();
   sessions.delete(level);
   trainer = null;
-  attempt = null;
   batch = null;
-  watchState = null;
-  watchSegment = null;
-  watchResult = null;
+  resetAttempt();
   if (mode === 'replay') setMode('edit');
   else {
     renderMap();
@@ -1348,7 +1364,7 @@ $('map-code').addEventListener('click', () => {
     actionButton('导入文本', 'primary', () => {
       try {
         const imported = readLevel($('map-text').value);
-        editMap({ portals: [], finish: null, gameplay: 'classic', devices: new Map(), ...imported }, true);
+        editMap({ portals: [], finish: null, gameplay: 'classic', devices: new Map(), unlimitedTraining: true, ...imported }, true);
         dialog.close();
       } catch (error) {
         dialogError(error.message);
