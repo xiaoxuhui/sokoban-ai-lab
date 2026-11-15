@@ -249,12 +249,14 @@
   }
 
   function placed(map, state) {
-    return state.boxes.filter(box => map.goals.has(box)).length;
+    let count = 0;
+    for (const box of state.boxes) if (map.goals.has(box)) count++;
+    return count;
   }
 
-  function won(map, state) {
+  function won(map, state, covered) {
     if (map.finish !== null && state.player !== map.finish) return false;
-    return (map.goals.size > 0 || map.finish !== null) && placed(map, state) === map.goals.size;
+    return (map.goals.size > 0 || map.finish !== null) && (covered ?? placed(map, state)) === map.goals.size;
   }
 
   function pushLanding(map, first, direction, occupied) {

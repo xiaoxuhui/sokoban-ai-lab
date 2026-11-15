@@ -41,8 +41,6 @@ let manual = map.initial;
 let undo = [];
 let manualPath = [];
 const heldDirections = new Set();
-const manualMoves = [];
-let manualFrame = null;
 let recording = false;
 let trainer = null;
 let trainingProblem = '';
@@ -271,21 +269,20 @@ function renderManual(previous = null) {
   $('reset-play').disabled = !manual.moves;
   $('save-demo').disabled = !manualPath.length;
   renderMoveCount();
-  const solved = won(map, manual);
+  const covered = placed(map, manual);
+  const solved = won(map, manual, covered);
   const message = recording ? (solved ? '示范已通关，可以保存。' : '示范中。走几步或推几次箱后即可保存。') :
-    (solved ? '通关！' : objectiveProgress(manual));
+    (solved ? '通关！' : objectiveProgress(manual, covered));
   setMapNote(message, solved ? 'success' : '');
 }
 
 function renderMoveCount() {
-  const text = '移动 ' + manual.moves + ' 步 · 推箱 ' + manual.pushes + ' 次' +
-    (manualMoves.length ? ' · 待走 ' + manualMoves.length + ' 步' : '');
+  const text = '移动 ' + manual.moves + ' 步 · 推箱 ' + manual.pushes + ' 次';
   const count = $('move-count');
   if (count.textContent !== text) count.textContent = text;
 }
 
-function objectiveProgress(state) {
-  const covered = placed(map, state);
+function objectiveProgress(state, covered = placed(map, state)) {
   if (map.finish !== null && covered === map.goals.size && state.player !== map.finish) return '请走到玩家终点。';
   return '目标已覆盖 ' + covered + ' / ' + map.goals.size;
 }
@@ -305,7 +302,6 @@ function setMode(next) {
     $('map-note').textContent = validate(map);
     return;
   }
-  if (next !== mode) cancelManualMoves();
   clearTimeout(playback);
   playback = 0;
   if (next !== 'play') recording = false;
@@ -353,7 +349,6 @@ function renderLevelPicker() {
 }
 
 function loadBoard(recenter) {
-  cancelManualMoves();
   watchState = null;
   watchSegment = null;
   watchResult = null;
@@ -625,42 +620,19 @@ $('play-mode').addEventListener('click', () => setMode('play'));
 $('watch-mode').addEventListener('click', () => setMode('watch'));
 $('watch-speed').addEventListener('change', () => { nextWatchAt = 0; });
 
-function queueMove(direction) {
+function move(direction) {
   if (mode !== 'play' || dialog.open || document.hidden || won(map, manual)) return;
-  manualMoves.push(direction);
-  if (manualFrame === null) manualFrame = requestAnimationFrame(runManualMove);
-  renderMoveCount();
-}
-
-function runManualMove() {
-  manualFrame = null;
-  if (mode !== 'play' || dialog.open || document.hidden || won(map, manual)) {
-    cancelManualMoves();
-    return;
-  }
-  const direction = manualMoves.shift();
   const next = step(map, manual, direction);
-  if (next !== manual) {
-    const previous = manual;
-    undo.push(previous);
-    manualPath.push(direction);
-    manual = next;
-    followPlayer(manual);
-    if (won(map, manual)) manualMoves.length = 0;
-    renderManual(previous);
-  } else renderMoveCount();
-  if (manualMoves.length) manualFrame = requestAnimationFrame(runManualMove);
+  if (next === manual) return;
+  const previous = manual;
+  undo.push(previous);
+  manualPath.push(direction);
+  manual = next;
+  followPlayer(manual);
+  renderManual(previous);
 }
 
-function cancelManualMoves() {
-  if (manualFrame === null && !manualMoves.length) return;
-  if (manualFrame !== null) cancelAnimationFrame(manualFrame);
-  manualFrame = null;
-  manualMoves.length = 0;
-  renderMoveCount();
-}
-
-document.querySelectorAll('[data-dir]').forEach(button => button.addEventListener('click', () => queueMove(Number(button.dataset.dir))));
+document.querySelectorAll('[data-dir]').forEach(button => button.addEventListener('click', () => move(Number(button.dataset.dir))));
 const movementKeys = { arrowup: 0, w: 0, arrowright: 1, d: 1, arrowdown: 2, s: 2, arrowleft: 3, a: 3 };
 const keyIdentity = event => event.code || event.key.toLowerCase();
 document.addEventListener('keydown', event => {
@@ -671,11 +643,6 @@ document.addEventListener('keydown', event => {
     return;
   }
   const pressed = event.key.toLowerCase();
-  if (pressed === 'escape' && manualMoves.length) {
-    event.preventDefault();
-    cancelManualMoves();
-    return;
-  }
   const direction = movementKeys[pressed];
   if (pressed !== 'z' && typeof direction !== 'number') return;
   event.preventDefault();
@@ -683,22 +650,15 @@ document.addEventListener('keydown', event => {
   if (event.repeat || heldDirections.has(key)) return;
   heldDirections.add(key);
   if (pressed === 'z') undoMove();
-  else queueMove(direction);
+  else move(direction);
 });
 document.addEventListener('keyup', event => heldDirections.delete(keyIdentity(event)));
-window.addEventListener('blur', () => {
-  heldDirections.clear();
-  cancelManualMoves();
-});
+window.addEventListener('blur', () => heldDirections.clear());
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) return;
-  heldDirections.clear();
-  cancelManualMoves();
+  if (document.hidden) heldDirections.clear();
 });
 function undoMove() {
-  if (mode !== 'play') return;
-  cancelManualMoves();
-  if (!undo.length) return;
+  if (mode !== 'play' || !undo.length) return;
   const previous = manual;
   manual = undo.pop();
   manualPath.pop();
@@ -707,7 +667,6 @@ function undoMove() {
 }
 $('undo').addEventListener('click', undoMove);
 function resetPlay() {
-  cancelManualMoves();
   manual = map.initial;
   undo = [];
   manualPath = [];
@@ -751,14 +710,12 @@ $('record-demo').addEventListener('click', () => {
   if (view.top < 0 || view.top >= window.innerHeight) board.scrollIntoView({ block: 'center' });
 });
 $('cancel-demo').addEventListener('click', () => {
-  cancelManualMoves();
   recording = false;
   renderMap();
   renderTraining();
 });
 $('save-demo').addEventListener('click', () => {
   if (!recording || !manualPath.length) return;
-  cancelManualMoves();
   if (!updateDemonstration(manualPath)) {
     $('map-note').textContent = trainingProblem || '示范走出了 AI 的训练区。请撤销超出地图外围三格的步数。';
     $('map-note').classList.add('error');
@@ -1003,7 +960,6 @@ $('stop-replay').addEventListener('click', () => {
 
 function replayRoutes(routes, firstNumber = 0) {
   if (running || playback || recording) return;
-  cancelManualMoves();
   mode = 'replay';
   let routeIndex = 0;
   let index = 0;
@@ -1056,7 +1012,6 @@ function actionButton(label, kind, handler) {
 }
 
 function openDialog(title, content, actions = []) {
-  cancelManualMoves();
   $('dialog-title').textContent = title;
   $('dialog-body').innerHTML = content;
   $('dialog-error').hidden = true;
@@ -1072,7 +1027,7 @@ function dialogError(message) {
 $('help').addEventListener('click', () => {
   openDialog('使用说明', '<p>地图从空白开始，按住鼠标右键拖动可向四周平移。选好工具后，用左键点击或拖动绘制。</p>' +
     '<p>放置玩家起点和箱子目标，箱子数可以多于目标数。选「玩家终点」放置一面旗，再点旗子可移除。有旗时，玩家也要走到旗子处才能通关。只放旗子也可以做走位关卡。</p>' +
-    '<p>点「手动试玩」，用方向键、WASD 或屏幕方向按钮移动。键盘每按一次走一步，长按时只走第一步。快速连按会逐步显示，按 Esc 可取消待走的步数，按 Z 撤销上一步。勾选「允许连推多个箱子」后，一步可以推动相邻的一整排箱子。</p>' +
+    '<p>点「手动试玩」，用方向键、WASD 或屏幕方向按钮移动。键盘每按一次走一步，长按时只走第一步。按 Z 撤销上一步。勾选「允许连推多个箱子」后，一步可以推动相邻的一整排箱子。</p>' +
     '<p>用「传送门」依次点选墙或箱子的两条边。同编号的两端双向相通。出口和另一个入口正对紧贴时，会继续通过下一对门。开启连推时，整排箱子先一起前进，最前面的箱子碰墙后才触发门箱传送。依次尝试后箱、前箱和玩家，没门或传不通就试下一项。前箱传走的同一步，门箱和它后面被推动的箱子会向前补一格。关闭连推时，门箱沿门面推到前箱就先传走前箱。没有可执行的推箱动作时，玩家可以从碰到的门面进入，即使门箱背后紧贴的是普通箱子。若最终出口有箱子并且推得动，玩家会在同一步穿门走到让出的格子。</p>' +
     '<p>开始训练后，左侧地图会显示 AI 的每一步。可在「观战 AI」中调速度或暂停。进入手动试玩会暂停训练，回到训练区可继续。</p>' +
     '<p>点「示范几步」，从起点演示走位或推箱，再点「保存示范」。AI 每两回合会跟随示范一次，然后自行继续。胜率只统计独立尝试。</p>' +
