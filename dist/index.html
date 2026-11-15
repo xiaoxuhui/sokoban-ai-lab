@@ -6,9 +6,9 @@
   <meta name="description" content="绘制自定义地图，手动试玩，观察 AI 通过强化学习掌握推箱子。">
   <meta name="theme-color" content="#111715">
   <title>推箱子实验室</title>
-  <link rel="stylesheet" href="style.css?v=31">
-  <script src="engine.js?v=36" defer></script>
-  <script src="app.js?v=36" defer></script>
+  <link rel="stylesheet" href="style.css?v=37">
+  <script src="engine.js?v=37" defer></script>
+  <script src="app.js?v=37" defer></script>
 </head>
 <body>
   <header class="top">
@@ -25,7 +25,7 @@
       <p>画一张地图，亲自挑战，再看看 AI 如何学会推箱子。</p>
     </section>
 
-    <div class="workspace">
+    <div class="workspace" id="workspace">
       <section class="panel map-panel" aria-labelledby="map-title">
         <div class="panel-heading">
           <div>
@@ -48,14 +48,31 @@
         </div>
 
         <div class="map-toolbar" id="edit-tools">
+          <div class="rule-controls">
+            <label for="gameplay">玩法 <select id="gameplay">
+              <option value="classic">经典推箱子</option>
+              <option value="powered">方块推推推 · 有电源</option>
+              <option value="direct">方块推推推 · 无电源</option>
+            </select></label>
+            <label class="rule-toggle"><input id="chain-push" type="checkbox"> <span id="chain-push-label">允许连推多个箱子</span></label>
+          </div>
           <div class="brushes" role="group" aria-label="绘图工具">
-            <button type="button" data-brush="#" aria-pressed="true"><i class="sample wall"></i>墙</button>
+            <button type="button" data-brush="#" data-classic aria-pressed="true"><i class="sample wall"></i>墙</button>
             <button type="button" data-brush="." aria-pressed="false"><i class="sample goal"></i>目标</button>
             <button type="button" data-brush="$" aria-pressed="false"><i class="sample crate"></i>箱子</button>
             <button type="button" data-brush="@" aria-pressed="false"><i class="sample player"></i>玩家</button>
-            <button type="button" data-brush="finish" aria-pressed="false"><i class="sample finish-mark"></i>玩家终点</button>
-            <button type="button" data-brush="portal" aria-pressed="false"><i class="sample portal-sample"></i>传送门</button>
+            <button type="button" data-brush="finish" data-classic aria-pressed="false"><i class="sample finish-mark"></i>玩家终点</button>
+            <button type="button" data-brush="portal" data-classic aria-pressed="false"><i class="sample portal-sample"></i>传送门</button>
+            <button type="button" data-brush="pusher" aria-pressed="false" hidden><i class="sample device pusher-device" aria-hidden="true">→</i>推头</button>
+            <button type="button" data-brush="power" aria-pressed="false" hidden><i class="sample device power-device" aria-hidden="true">→</i>电源</button>
             <button type="button" data-brush=" " aria-pressed="false"><i class="sample eraser"></i>橡皮</button>
+          </div>
+          <div class="device-tools" id="device-direction-label" hidden>
+            <label for="device-direction">装置朝向</label>
+            <select id="device-direction">
+              <option value="0">↑ 上</option><option value="1" selected>→ 右</option>
+              <option value="2">↓ 下</option><option value="3">← 左</option>
+            </select>
           </div>
           <button class="outline" id="undo-edit" type="button" aria-keyshortcuts="Z" disabled>↶ 撤销编辑 <kbd>Z</kbd></button>
           <div class="secondary" id="finish-status"></div>
@@ -110,7 +127,7 @@
         </div>
       </section>
 
-      <section class="panel train-panel" aria-labelledby="train-title">
+      <section class="panel train-panel" id="train-panel" aria-labelledby="train-title">
         <div class="panel-heading">
           <div><h2 id="train-title">AI 训练</h2><div class="secondary">Q-learning · 浏览器本地运行</div></div>
           <div class="status-pill" id="train-status" role="status"><span></span><b>待训练</b></div>
@@ -140,9 +157,6 @@
             <button class="outline demo-button" id="record-demo" type="button">示范几步</button>
             <button class="plain" id="delete-demo" type="button" hidden>移除</button>
           </div>
-        </div>
-        <div class="training-options">
-          <label class="rule-toggle"><input id="chain-push" type="checkbox"> 允许连推多个箱子</label>
         </div>
         <div class="training-options">
           <label for="budget">每批回合数</label>

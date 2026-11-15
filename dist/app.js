@@ -1,6 +1,6 @@
 'use strict';
 
-const { examples, fromRows, readLevel, writeWorld, world, bounds, key, point, portalHost, trainingMap, validate, placed, won, step, Trainer } = Sokoban;
+const { examples, fromRows, readLevel, writeWorld, world, bounds, key, point, portalHost, trainingMap, validate, placed, won, step, activateDevice, Trainer } = Sokoban;
 const $ = id => document.getElementById(id);
 const board = $('board');
 const grid = $('grid');
@@ -8,6 +8,8 @@ const dialog = $('dialog');
 const storageKey = 'sokoban-lab-levels-v1';
 const recordBudget = 'next-record';
 const number = new Intl.NumberFormat('zh-CN');
+const brushButtons = [...document.querySelectorAll('[data-brush]')];
+const directionArrows = ['↑', '→', '↓', '←'];
 
 function loadLevels() {
   let first = { name: '自制关卡 1', tiles: new Map(), chainPush: false };
@@ -33,8 +35,8 @@ const library = loadLevels();
 const sessions = new Map();
 const editHistories = new WeakMap();
 let level = library.entries[library.index];
-let map = world(level.tiles, level.chainPush, level.portals, level.finish);
-let area = bounds(map.tiles, map.finish);
+let map = world(level.tiles, level.chainPush, level.portals, level.finish, level);
+let area = bounds(map.tiles, map.finish, map.initial.devices);
 let brush = '#';
 let pendingPortal = null;
 let portalMessage = '';
@@ -75,7 +77,7 @@ function cellSize() {
 }
 
 function centerMap() {
-  if (!map.tiles.size) camera = { x: 0.5, y: 0.5 };
+  if (!Number.isFinite(area.left)) camera = { x: 0.5, y: 0.5 };
   else if (map.initial.player !== -1) {
     const [x, y] = point(map.initial.player);
     camera = { x: x + 0.5, y: y + 0.5 };
@@ -152,14 +154,21 @@ function renderBoard(state, previous = null) {
   const drawCell = (cell, coordinate) => {
     const goal = map.goals.has(coordinate);
     const finish = map.finish === coordinate;
-    const tile = map.tiles.get(coordinate) === '#' ? '#' :
+    const tile = map.isWall(coordinate) ? '#' :
       boxes?.has(coordinate) ? (goal ? '*' : '$') :
       state.player === coordinate ? (goal ? '+' : '@') : (goal ? '.' : ' ');
     const ends = marks.get(coordinate) ?? [];
     const signature = ends.map(({ side, pair, kind }) => side + ':' + pair + (kind ? ':' + kind : '')).join(',');
-    if (cell.dataset.tile !== tile || cell.dataset.portals !== signature || cell.classList.contains('finish-cell') !== finish) {
+    const device = state.devices?.get(coordinate);
+    const deviceMark = device ? device.kind + ':' + device.direction : '';
+    const interactive = editable || (mode === 'play' && device?.kind === (map.gameplay === 'powered' ? 'power' : 'pusher'));
+    if (cell.disabled === interactive) cell.disabled = !interactive;
+    if (cell.tabIndex !== (interactive ? 0 : -1)) cell.tabIndex = interactive ? 0 : -1;
+    if (cell.dataset.tile !== tile || cell.dataset.portals !== signature || cell.dataset.device !== deviceMark ||
+        cell.classList.contains('finish-cell') !== finish) {
       cell.dataset.tile = tile;
       cell.dataset.portals = signature;
+      cell.dataset.device = deviceMark;
       cell.classList.toggle('wall', tile === '#');
       cell.classList.toggle('finish-cell', finish);
       cell.replaceChildren();
@@ -167,22 +176,24 @@ function renderBoard(state, previous = null) {
       if (goal) cell.append(makeTile('goal'));
       if ('$*'.includes(tile)) cell.append(makeTile(tile === '*' ? 'crate placed' : 'crate'));
       if ('@+'.includes(tile)) cell.append(makeTile('player'));
+      if (device) {
+        const icon = makeTile('device ' + device.kind + '-device');
+        icon.textContent = directionArrows[device.direction];
+        cell.append(icon);
+      }
       if (ends.length) drawPortalMarks(cell, ends);
       const [x, y] = point(coordinate);
       const label = ends.map(({ side, pair, kind }) => sideNames[side] + (pair ?
         (kind === 'entry' ? '单向入口 ' : kind === 'exit' ? '单向出口 ' : '双向传送门 ') + pair : '等待配对')).join('，');
       cell.setAttribute('aria-label', '坐标 ' + x + ', ' + y + '，' + tileName[tile] +
-        (finish ? '，玩家终点' : '') + (label ? '，' + label : ''));
+        (finish ? '，玩家终点' : '') + (label ? '，' + label : '') +
+        (device ? '，' + (device.kind === 'pusher' ? '推头' : '电源') + '朝' + sideNames[device.direction][0] : ''));
     }
   };
   if (full) {
     board.classList.toggle('editable', editable);
     board.classList.toggle('linking', linking);
-    cells.forEach((cell, coordinate) => {
-      drawCell(cell, coordinate);
-      if (cell.tabIndex !== (editable ? 0 : -1)) cell.tabIndex = editable ? 0 : -1;
-      if (cell.disabled === editable) cell.disabled = !editable;
-    });
+    cells.forEach(drawCell);
   } else {
     for (const coordinate of changed) {
       const cell = cells.get(coordinate);
@@ -224,6 +235,10 @@ function changedCells(previous, state, boxes) {
     changed.add(old);
     changed.add(coordinate);
   });
+  if (state.devices !== previous.devices) {
+    for (const [cell, device] of previous.devices) if (state.devices.get(cell) !== device) changed.add(cell);
+    for (const [cell, device] of state.devices) if (previous.devices.get(cell) !== device) changed.add(cell);
+  }
   return changed;
 }
 
@@ -238,6 +253,20 @@ function renderMap() {
   const editing = mode === 'edit';
   const playing = mode === 'play';
   const watching = mode === 'watch';
+  const devices = Boolean(map.initial.devices);
+  $('gameplay').value = map.gameplay;
+  $('workspace').classList.toggle('pusher-mode', devices);
+  $('train-panel').hidden = devices;
+  $('watch-mode').hidden = devices;
+  $('chain-push-label').textContent = devices ? '允许连推多个方块' : '允许连推多个箱子';
+  for (const tool of brushButtons) {
+    if (tool.hasAttribute('data-classic')) tool.hidden = devices;
+    if (tool.dataset.brush === 'pusher') tool.hidden = !devices;
+    if (tool.dataset.brush === 'power') tool.hidden = map.gameplay !== 'powered';
+    if (tool.hidden && tool.dataset.brush === brush) brush = '$';
+  }
+  for (const tool of brushButtons) tool.setAttribute('aria-pressed', tool.dataset.brush === brush);
+  $('device-direction-label').hidden = brush !== 'pusher' && brush !== 'power';
   const linking = editing && brush === 'portal';
   const state = activeState();
   $('edit-mode').setAttribute('aria-pressed', editing);
@@ -249,7 +278,7 @@ function renderMap() {
   $('watch-tools').hidden = !watching;
   $('replay-tools').hidden = mode !== 'replay';
   $('map-actions').hidden = !editing;
-  $('dpad').hidden = !playing;
+  $('dpad').hidden = !playing || state.player === -1;
   $('record-tools').hidden = !recording;
   $('portal-direction-label').hidden = !linking;
   $('portal-cancel').hidden = !linking || !pendingPortal;
@@ -258,7 +287,9 @@ function renderMap() {
   $('portal-help').textContent = portalMessage || (pendingPortal ?
     (oneWay ? '已选入口。请点出口，可共用已有出口。' : '已选第一端，再点墙或箱子的另一条边。') :
     (oneWay ? '先点入口，再点出口。点已有端点可管理连接。' : '点墙或箱子的两条边配对。点已有端点可管理连接。'));
-  $('map-info').textContent = '无限地图 · ' + map.initial.boxes.length + ' 个箱子 · ' + map.goals.size + ' 个目标';
+  $('map-info').textContent = (devices ? '方块推推推' : '无限地图') + ' · ' +
+    map.initial.boxes.length + ' 个箱子 · ' + map.goals.size + ' 个目标';
+  $('finish-status').hidden = devices;
   $('finish-status').textContent = map.finish === null ? '玩家终点可选' : '已设置玩家终点';
   if (playing) {
     renderManual();
@@ -266,7 +297,7 @@ function renderMap() {
   }
   const problem = editing || watching ? validate(map) || (watching ? trainingProblem : '') : '';
   const solved = !editing && won(map, state);
-  const note = problem || (editing ? '地图可试玩和训练' :
+  const note = problem || (editing ? (devices ? '地图可试玩' : '地图可试玩和训练') :
     watching ? watchNote(state, solved) : '');
   setMapNote(note, problem ? 'error' : solved ? 'success' : '');
   if (mode === 'replay') renderReplayControls(state, solved);
@@ -294,13 +325,15 @@ function renderManual(previous = null) {
   renderMoveCount();
   const covered = placed(map, manual);
   const solved = won(map, manual, covered);
-  const message = recording ? (solved ? '示范已通关，可以保存。' : '示范中。走几步或推几次箱后即可保存。') :
+  let message = recording ? (solved ? '示范已通关，可以保存。' : '示范中。走几步或推几次箱后即可保存。') :
     (solved ? '通关！' : objectiveProgress(manual, covered));
+  if (manual.devices && !solved) message += map.gameplay === 'powered' ? ' · 走到电源旁再点击' : ' · 点击推头';
   setMapNote(message, solved ? 'success' : '');
 }
 
 function renderMoveCount() {
-  const text = '移动 ' + manual.moves + ' 步 · 推箱 ' + manual.pushes + ' 次';
+  const text = manual.devices ? '操作 ' + manual.moves + ' 次 · 推动 ' + manual.pushes + ' 次' :
+    '移动 ' + manual.moves + ' 步 · 推箱 ' + manual.pushes + ' 次';
   const count = $('move-count');
   if (count.textContent !== text) count.textContent = text;
 }
@@ -321,6 +354,7 @@ function watchNote(state, solved) {
 }
 
 function setMode(next) {
+  if (next === 'watch' && map.initial.devices) return;
   if (next === 'play' && validate(map)) {
     $('map-note').textContent = validate(map);
     return;
@@ -356,10 +390,14 @@ function saveLevels() {
     localStorage.setItem(storageKey, JSON.stringify({
       index: library.index,
       levels: library.entries.map(entry => ({
-        name: entry.name, code: writeWorld(entry.tiles, entry.chainPush, entry.portals, entry.finish), demonstration: entry.demonstration,
+        name: entry.name, code: levelCode(entry), demonstration: entry.demonstration,
       })),
     }));
   } catch { /* Storage is optional. */ }
+}
+
+function levelCode(entry) {
+  return writeWorld(entry.tiles, entry.chainPush, entry.portals, entry.finish, entry);
 }
 
 function renderLevelPicker() {
@@ -376,8 +414,8 @@ function loadBoard(recenter) {
   watchSegment = null;
   watchResult = null;
   nextWatchAt = 0;
-  map = world(level.tiles, level.chainPush, level.portals, level.finish);
-  area = bounds(level.tiles, map.finish);
+  map = world(level.tiles, level.chainPush, level.portals, level.finish, level);
+  area = bounds(level.tiles, map.finish, map.initial.devices);
   manual = map.initial;
   undo = [];
   manualPath = [];
@@ -483,10 +521,30 @@ $('current-level').addEventListener('change', event => selectLevel(Number(event.
 $('prev-level').addEventListener('click', () => selectLevel(library.index - 1));
 $('next-level').addEventListener('click', () => selectLevel(library.index + 1));
 $('chain-push').addEventListener('change', event => editMap({ chainPush: event.target.checked }));
+$('gameplay').addEventListener('change', event => editMap({ gameplay: event.target.value }, true));
 $('undo-edit').addEventListener('click', undoEdit);
 
 function paint(coordinate) {
   const old = map.tiles.get(coordinate) ?? ' ';
+  if (brush === 'pusher' || brush === 'power') {
+    if ('$*@+'.includes(old)) {
+      setMapNote('请把装置放在空格或目标格上。', 'error');
+      return;
+    }
+    const direction = Number($('device-direction').value);
+    const previous = level.devices?.get(coordinate);
+    if (previous?.kind === brush && previous.direction === direction) return;
+    const devices = new Map(level.devices);
+    devices.set(coordinate, { kind: brush, direction });
+    editMap({ devices });
+    return;
+  }
+  if (brush === ' ' && map.initial.devices?.has(coordinate)) {
+    const devices = new Map(level.devices);
+    devices.delete(coordinate);
+    editMap({ devices });
+    return;
+  }
   if (brush === 'finish') {
     if (old === '#') {
       $('map-note').textContent = '请在可行走的格子上设置玩家终点。';
@@ -521,8 +579,13 @@ function paint(coordinate) {
   const sameHost = portalHost(tile) && portalHost(old) && (tile === '#') === (old === '#');
   const removed = new Set();
   if (!sameHost) portals.forEach((end, i) => { if (end.cell === coordinate) removed.add(Math.floor(i / 2)); });
-  const finish = tile === '#' && map.finish === coordinate ? null : map.finish;
-  editMap({ tiles, portals: portals.filter((_, i) => !removed.has(Math.floor(i / 2))), finish });
+  const finish = tile === '#' && level.finish === coordinate ? null : level.finish ?? null;
+  const changes = { tiles, portals: portals.filter((_, i) => !removed.has(Math.floor(i / 2))), finish };
+  if ('$*@+'.includes(tile) && level.devices?.has(coordinate)) {
+    changes.devices = new Map(level.devices);
+    changes.devices.delete(coordinate);
+  }
+  editMap(changes);
 }
 
 function cellAt(element) {
@@ -654,6 +717,12 @@ board.addEventListener('lostpointercapture', () => {
 });
 board.addEventListener('click', event => {
   const coordinate = cellAt(event.target);
+  if (mode === 'play' && coordinate && manual.devices && !dialog.open && !document.hidden && !won(map, manual)) {
+    const result = activateDevice(map, manual, coordinate);
+    if (result.state !== manual) commitManualAction(result.state);
+    else if (result.message) setMapNote(result.message, 'error');
+    return;
+  }
   if (mode !== 'edit' || !coordinate) return;
   if (brush === 'portal') portalClick(event, coordinate);
   else if (brush === 'finish' || event.detail === 0) paint(coordinate);
@@ -676,12 +745,11 @@ $('center-map').addEventListener('click', () => {
   renderBoard(activeState());
 });
 
-document.querySelectorAll('[data-brush]').forEach(button => {
+brushButtons.forEach(button => {
   button.addEventListener('click', () => {
     brush = button.dataset.brush;
     pendingPortal = null;
     portalMessage = '';
-    document.querySelectorAll('[data-brush]').forEach(tool => tool.setAttribute('aria-pressed', tool === button));
     renderMap();
   });
 });
@@ -701,9 +769,13 @@ function move(direction) {
   if (mode !== 'play' || dialog.open || document.hidden || won(map, manual)) return;
   const next = step(map, manual, direction);
   if (next === manual) return;
+  commitManualAction(next, direction);
+}
+
+function commitManualAction(next, direction) {
   const previous = manual;
   undo.push(previous);
-  manualPath.push(direction);
+  if (!manual.devices) manualPath.push(direction);
   manual = next;
   followPlayer(manual);
   renderManual(previous);
@@ -717,7 +789,7 @@ document.addEventListener('keydown', event => {
       event.target.closest('input, textarea, select')) return;
   const pressed = event.key.toLowerCase();
   if (mode !== 'play' && (mode !== 'edit' || pressed !== 'z')) return;
-  if (event.key === 'Enter' && event.repeat && event.target.closest('[data-dir]')) {
+  if (event.key === 'Enter' && event.repeat && event.target.closest('[data-dir], .cell')) {
     event.preventDefault();
     return;
   }
@@ -993,6 +1065,7 @@ function trainFrame(now) {
 }
 
 function toggleTraining() {
+  if (map.initial.devices) return;
   if (running) pauseTraining();
   else {
     if (validate(map) || recording) return;
@@ -1164,7 +1237,8 @@ $('help').addEventListener('click', () => {
     '<p>用「传送门」依次点选墙或箱子的两条边。双向门两端都能进入。选「单向」后，先点入口，再点出口。一个入口只有一个去向，标着「出」的端点可以接收多条连接。点已有端点可管理连接。</p>' +
     '<p>出口和另一个入口正对紧贴时，会继续通过下一对门。开启连推时，整排箱子先一起前进，最前面的箱子碰墙后才触发门箱传送。依次尝试后箱、前箱和玩家，没门或传不通就试下一项。前箱传走的同一步，门箱和它后面被推动的箱子会向前补一格。关闭连推时，门箱沿门面推到前箱就先传走前箱。没有可执行的推箱动作时，玩家可以从碰到的门面进入，即使门箱背后紧贴的是普通箱子。若最终出口有箱子并且推得动，玩家会在同一步穿门走到让出的格子。</p>' +
     '<p>开始训练后，左侧地图会显示 AI 的每一步。可在「观战 AI」中调速度或暂停。进入手动试玩会暂停训练，回到训练区可继续。</p>' +
-    '<p>点「示范几步」，从起点演示走位或推箱，再点「保存示范」。AI 每两回合会跟随示范一次，然后自行继续。胜率只统计独立尝试。</p>' +
+    '<p>「方块推推推」用推头把箱子推进目标。选定装置朝向再放置。无电源时直接点推头。有电源时走到电源旁再点，电源箭头须对准相邻推头的背面。每次启动推一格，开启连推可以推动前方连续的多个方块。</p>' +
+    '<p>点「示范几步」录下开局或通关路线，再点「保存示范」。胜率只统计 AI 独立尝试。</p>' +
     '<p>AI 用 Q-learning 反复练习。训练区包含已绘制的地图和外围三格空地，最多 40,000 格。找到通关路线后即可回放。</p>' +
     '<p>用关卡列表逐关训练。切换时会暂停当前训练，切回即可继续。示范、地图和规则保存在浏览器。修改地图或规则会清空当前关的示范和训练进度。</p>',
   [actionButton('知道了', 'primary', () => dialog.close())]);
@@ -1203,7 +1277,7 @@ function confirmSaveChange(deleting) {
     actionButton('返回', 'outline plain', manageSave),
     actionButton('确认' + verb, 'primary danger', () => {
       if (deleting) deleteLevel();
-      else editMap({ tiles: new Map(), portals: [], finish: null }, true);
+      else editMap({ tiles: new Map(), portals: [], finish: null, devices: new Map() }, true);
       dialog.close();
     }),
   ]);
@@ -1243,7 +1317,7 @@ $('map-code').addEventListener('click', () => {
     '<textarea id="map-text" aria-label="地图文本" aria-describedby="symbols" spellcheck="false" wrap="off"></textarea>',
   [
     actionButton('下载当前地图', 'outline plain', () => {
-      const url = URL.createObjectURL(new Blob([writeWorld(map.tiles, level.chainPush, level.portals, map.finish) + '\n'], { type: 'application/json' }));
+      const url = URL.createObjectURL(new Blob([levelCode(level) + '\n'], { type: 'application/json' }));
       const link = document.createElement('a');
       link.href = url;
       link.download = 'sokoban-map.json';
@@ -1253,14 +1327,14 @@ $('map-code').addEventListener('click', () => {
     actionButton('导入文本', 'primary', () => {
       try {
         const imported = readLevel($('map-text').value);
-        editMap({ portals: [], finish: null, ...imported }, true);
+        editMap({ portals: [], finish: null, gameplay: 'classic', devices: new Map(), ...imported }, true);
         dialog.close();
       } catch (error) {
         dialogError(error.message);
       }
     }),
   ]);
-  $('map-text').value = writeWorld(map.tiles, level.chainPush, level.portals, map.finish);
+  $('map-text').value = levelCode(level);
 });
 
 renderLevelPicker();

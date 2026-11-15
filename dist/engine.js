@@ -4,6 +4,8 @@
 
   const directions = [[0, -1], [1, 0], [0, 1], [-1, 0]];
   const symbols = '# .@$*+';
+  const deviceKinds = ['pusher', 'power'];
+  const gameplays = ['classic', 'powered', 'direct'];
   const examples = [
     ['##########', '#        #', '# .  .   #', '#   #    #', '# $  $   #', '#   @    #', '#     #  #', '##########'],
     ['########', '#      #', '#  $ . #', '# @    #', '#      #', '########'],
@@ -171,14 +173,30 @@
       finish = key(...location);
       if (tiles.get(finish) === '#') throw new Error('玩家终点须放在可行走的格子上。');
     }
-    return { tiles, chainPush: data.chainPush === true, portals, finish };
+    const gameplay = data.gameplay ?? 'classic';
+    const devices = new Map();
+    if (!gameplays.includes(gameplay) || !Array.isArray(data.devices ?? [])) {
+      throw new Error('请检查玩法和装置列表。');
+    }
+    for (const entry of data.devices ?? []) {
+      if (!Array.isArray(entry) || entry.length !== 4) throw new Error('装置须写成 [横坐标, 纵坐标, 类型, 朝向]。');
+      const [x, y, kind, direction] = entry;
+      const cell = key(x, y);
+      if (![x, y].every(value => Number.isSafeInteger(value) && Math.abs(value) <= 1e12) ||
+          !deviceKinds.includes(kind) || !Number.isInteger(direction) || !directions[direction] ||
+          devices.has(cell) || '$*@+'.includes(tiles.get(cell) ?? ' ')) {
+        throw new Error('请检查装置坐标、朝向或重叠的方块。');
+      }
+      devices.set(cell, { kind, direction });
+    }
+    return { tiles, chainPush: data.chainPush === true, portals, finish, gameplay, devices };
   }
 
   function readWorld(text) {
     return readLevel(text).tiles;
   }
 
-  function writeWorld(tiles, chainPush = false, portals = [], finish = null) {
+  function writeWorld(tiles, chainPush = false, portals = [], finish = null, { gameplay = 'classic', devices } = {}) {
     const lines = [...tiles].map(([cell, tile]) => JSON.stringify([...point(cell), tile]));
     const pairs = [];
     for (let i = 0; i < portals.length; i += 2) {
@@ -188,10 +206,13 @@
     }
     const links = pairs.length ? '],\n  "portals": [\n    ' + pairs.join(',\n    ') + '\n  ]' : ']';
     const finishField = finish === null ? '' : ',\n  "finish": ' + JSON.stringify(point(finish));
-    return '{\n  "version": 1,\n  "chainPush": ' + chainPush + ',\n  "tiles": [' + (lines.length ? '\n    ' + lines.join(',\n    ') + '\n  ' : '') + links + finishField + '\n}';
+    const gameplayField = gameplay === 'classic' ? '' : ',\n  "gameplay": ' + JSON.stringify(gameplay);
+    const deviceField = devices?.size ? ',\n  "devices": [\n    ' + [...devices].map(([cell, { kind, direction }]) =>
+      JSON.stringify([...point(cell), kind, direction])).join(',\n    ') + '\n  ]' : '';
+    return '{\n  "version": 1,\n  "chainPush": ' + chainPush + ',\n  "tiles": [' + (lines.length ? '\n    ' + lines.join(',\n    ') + '\n  ' : '') + links + finishField + gameplayField + deviceField + '\n}';
   }
 
-  function world(tiles, chainPush = false, portals = [], finish = null) {
+  function world(tiles, chainPush = false, portals = [], finish = null, { gameplay = 'classic', devices = new Map() } = {}) {
     const goals = new Set();
     const boxes = [];
     let player = -1;
@@ -206,11 +227,18 @@
       return dx ? (Number(cell.slice(0, comma)) + dx) + cell.slice(comma) :
         cell.slice(0, comma + 1) + (Number(cell.slice(comma + 1)) + dy);
     };
-    const isWall = cell => tiles.get(cell) === '#';
+    const pusherMode = gameplay !== 'classic';
+    const isWall = cell => !pusherMode && tiles.get(cell) === '#';
+    const initial = { player, boxes, moves: 0, pushes: 0, portalCells: [] };
+    if (pusherMode) {
+      portals = [];
+      finish = null;
+      initial.devices = gameplay === 'direct' ? new Map([...devices].filter(([, device]) => device.kind === 'pusher')) : devices;
+    } else initial.portalCells = portals.map(end => end.cell);
     return {
-      tiles, goals, finish, chainPush, isWall, adjacent, portalSides: portals.map(end => end.side),
+      tiles, goals, finish, chainPush, gameplay, isWall, adjacent, portalSides: portals.map(end => end.side),
       portalIndex: indexPortals(portals, isWall, adjacent),
-      initial: { player, boxes, moves: 0, pushes: 0, portalCells: portals.map(end => end.cell) },
+      initial,
       neighbor(cell, direction) {
         const next = adjacent(cell, direction);
         return isWall(next) ? -1 : next;
@@ -218,7 +246,7 @@
     };
   }
 
-  function bounds(tiles, finish = null) {
+  function bounds(tiles, finish = null, devices) {
     let left = Infinity;
     let top = Infinity;
     let right = -Infinity;
@@ -228,13 +256,15 @@
       right = left;
       bottom = top;
     }
-    for (const cell of tiles.keys()) {
+    const include = cell => {
       const [x, y] = point(cell);
       left = Math.min(left, x);
       right = Math.max(right, x);
       top = Math.min(top, y);
       bottom = Math.max(bottom, y);
-    }
+    };
+    for (const [cell, tile] of tiles) if (!devices || tile !== '#') include(cell);
+    if (devices) for (const cell of devices.keys()) include(cell);
     return { left, top, right, bottom };
   }
 
@@ -261,7 +291,7 @@
   }
 
   function validate(map) {
-    if (map.initial.player === -1) return '请放置一个玩家起点。';
+    if (map.initial.player === -1 && map.gameplay !== 'direct') return '请放置一个玩家起点。';
     if (!map.goals.size && map.finish === null) return '请至少放置一个箱子目标或玩家终点。';
     if (map.initial.boxes.length < map.goals.size) return '箱子不足，无法覆盖所有目标点。';
     return '';
@@ -289,6 +319,11 @@
 
   function step(map, state, direction) {
     if (state.player === -1 || !directions[direction]) return state;
+    if (state.devices) {
+      const player = map.adjacent(state.player, direction);
+      if (state.devices.has(player) || state.boxes.includes(player)) return state;
+      return { ...state, player, moves: state.moves + 1 };
+    }
     if (map.portalSides.length) return portalStep(map, state, direction);
     const player = map.neighbor(state.player, direction);
     if (player === -1) return state;
@@ -297,6 +332,47 @@
     const landing = pushLanding(map, player, direction, new Set(state.boxes));
     if (landing === -1) return state;
     return moveStraight(map, state, player, box, landing, direction);
+  }
+
+  function activateDevice(map, state, cell) {
+    const devices = state.devices;
+    const selected = devices?.get(cell);
+    if (!selected) return { state };
+    let head = cell;
+    const direction = selected.direction;
+    if (map.gameplay === 'powered') {
+      if (selected.kind !== 'power') return { state };
+      if (!directions.some((_, side) => map.adjacent(cell, side) === state.player)) {
+        return { state, message: '走到电源紧邻的一格再点击。' };
+      }
+      head = map.adjacent(cell, direction);
+      const receiver = devices.get(head);
+      if (receiver?.kind !== 'pusher' || receiver.direction !== direction) {
+        return { state, message: '电源的箭头要正对相邻推头的背面。' };
+      }
+    } else if (selected.kind !== 'pusher') return { state };
+
+    const boxes = new Set(state.boxes);
+    const occupied = coordinate => boxes.has(coordinate) || devices.has(coordinate);
+    const first = map.adjacent(head, direction);
+    if (!occupied(first)) return { state, message: '推头正前方没有方块。' };
+    const moved = new Map();
+    let movesDevice = false;
+    let landing = first;
+    while (occupied(landing)) {
+      const next = map.adjacent(landing, direction);
+      moved.set(landing, next);
+      movesDevice ||= devices.has(landing);
+      landing = next;
+      if (!map.chainPush && occupied(landing)) return { state, message: '前面有多个方块。可开启连推后一起推。' };
+    }
+    if (landing === state.player) return { state, message: '玩家挡在推头的前进路线上。' };
+    const nextDevices = movesDevice ? new Map([...devices].map(([coordinate, device]) =>
+      [moved.get(coordinate) ?? coordinate, device])) : devices;
+    return { state: {
+      ...state, boxes: state.boxes.map(coordinate => moved.get(coordinate) ?? coordinate), devices: nextDevices,
+      moves: state.moves + 1, pushes: state.pushes + 1,
+    } };
   }
 
   function moveStraight(map, state, player, box, landing, direction, single = !map.chainPush) {
@@ -796,7 +872,7 @@
     }
   }
 
-  const api = { examples, readMap, fromRows, readLevel, readWorld, writeWorld, world, bounds, key, point, portalHost, trainingMap, compile, validate, placed, won, step, Trainer };
+  const api = { examples, readMap, fromRows, readLevel, readWorld, writeWorld, world, bounds, key, point, portalHost, trainingMap, compile, validate, placed, won, step, activateDevice, Trainer };
   if (typeof module === 'object') module.exports = api;
   else root.Sokoban = api;
 })(globalThis);
