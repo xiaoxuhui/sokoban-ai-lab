@@ -333,36 +333,41 @@
     const devices = state.devices;
     const selected = devices?.get(cell);
     if (!selected) return { state };
-    let head = cell;
-    let direction = selected.direction;
+    let base = cell;
     if (map.gameplay === 'powered') {
       if (selected.kind !== 'power') return { state };
-      head = map.adjacent(cell, direction);
-      const receiver = devices.get(head);
-      if (receiver?.kind !== 'pusher') {
-        return { state, message: '电源的箭头要指向紧邻的推头。' };
+      base = map.adjacent(cell, selected.direction);
+      if (devices.get(base)?.kind !== 'pusher') {
+        return { state, message: '电源的箭头要指向紧邻的拉推头。' };
       }
-      direction = receiver.direction;
-    } else if (selected.kind !== 'pusher') return { state };
+    }
+    const pusher = devices.get(base);
+    if (pusher?.kind !== 'pusher') return { state };
 
+    const { direction } = pusher;
+    const front = map.adjacent(base, direction);
     const boxes = new Set(state.boxes);
     const occupied = coordinate => boxes.has(coordinate) || devices.has(coordinate);
-    const first = map.adjacent(head, direction);
-    if (!occupied(first)) return { state, message: '推头正前方没有方块。' };
     const moved = new Map();
-    let movesDevice = false;
-    let landing = first;
-    while (occupied(landing)) {
-      const next = map.adjacent(landing, direction);
-      moved.set(landing, next);
-      movesDevice ||= devices.has(landing);
-      landing = next;
-      if (!map.chainPush && occupied(landing)) return { state, message: '前面有多个方块。可开启连推后一起推。' };
+    if (occupied(front)) {
+      for (let position = front; occupied(position); ) {
+        const next = map.adjacent(position, direction);
+        if (!map.chainPush && occupied(next)) return { state, message: '前面有多个方块。可开启连推后一起推。' };
+        moved.set(position, next);
+        position = next;
+      }
+    } else {
+      const beyond = map.adjacent(front, direction);
+      if (!occupied(beyond)) return { state, message: '拉推头前方两格内没有方块。' };
+      moved.set(beyond, front);
     }
-    const nextDevices = movesDevice ? new Map([...devices].map(([coordinate, device]) =>
-      [moved.get(coordinate) ?? coordinate, device])) : devices;
+    const nextDevices = new Map();
+    for (const [position, device] of devices) {
+      nextDevices.set(moved.get(position) ?? position, device);
+    }
+    const nextBoxes = state.boxes.map(position => moved.get(position) ?? position);
     return { state: {
-      ...state, boxes: state.boxes.map(coordinate => moved.get(coordinate) ?? coordinate), devices: nextDevices,
+      ...state, boxes: nextBoxes, devices: nextDevices,
       moves: state.moves + 1, pushes: state.pushes + 1,
     } };
   }

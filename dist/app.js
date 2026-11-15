@@ -187,7 +187,7 @@ function renderBoard(state, previous = null) {
         (kind === 'entry' ? '单向入口 ' : kind === 'exit' ? '单向出口 ' : '双向传送门 ') + pair : '等待配对')).join('，');
       cell.setAttribute('aria-label', '坐标 ' + x + ', ' + y + '，' + tileName[tile] +
         (finish ? '，玩家终点' : '') + (label ? '，' + label : '') +
-        (device ? '，' + (device.kind === 'pusher' ? '推头' : '电源') + '朝' + sideNames[device.direction][0] : ''));
+        (device ? '，' + (device.kind === 'pusher' ? '拉推头' : '电源') + '朝' + sideNames[device.direction][0] : ''));
     }
   };
   if (full) {
@@ -328,12 +328,12 @@ function renderManual(previous = null) {
   const solved = won(map, manual, covered);
   let message = recording ? (solved ? '示范已通关，可以保存。' : '示范中。走几步或推几次箱后即可保存。') :
     (solved ? '通关！' : objectiveProgress(manual, covered));
-  if (manual.devices && !solved) message += map.gameplay === 'powered' ? ' · 点击电源' : ' · 点击推头';
+  if (manual.devices && !solved) message += map.gameplay === 'powered' ? ' · 点击电源' : ' · 点击拉推头';
   setMapNote(message, solved ? 'success' : '');
 }
 
 function renderMoveCount() {
-  const text = manual.devices ? '操作 ' + manual.moves + ' 次 · 推动 ' + manual.pushes + ' 次' :
+  const text = manual.devices ? '操作 ' + manual.moves + ' 次 · 推拉 ' + manual.pushes + ' 次' :
     '移动 ' + manual.moves + ' 步 · 推箱 ' + manual.pushes + ' 次';
   const count = $('move-count');
   if (count.textContent !== text) count.textContent = text;
@@ -1248,7 +1248,7 @@ $('help').addEventListener('click', () => {
     '<p>用「传送门」依次点选墙或箱子的两条边。双向门两端都能进入。选「单向」后，先点入口，再点出口。一个入口只有一个去向，标着「出」的端点可以接收多条连接。点已有端点可管理连接。</p>' +
     '<p>出口和另一个入口正对紧贴时，会继续通过下一对门。开启连推时，整排箱子先一起前进，最前面的箱子碰墙后才触发门箱传送。依次尝试后箱、前箱和玩家，没门或传不通就试下一项。前箱传走的同一步，门箱和它后面被推动的箱子会向前补一格。关闭连推时，门箱沿门面推到前箱就先传走前箱。没有可执行的推箱动作时，玩家可以从碰到的门面进入，即使门箱背后紧贴的是普通箱子。若最终出口有箱子并且推得动，玩家会在同一步穿门走到让出的格子。</p>' +
     '<p>开始训练后，左侧地图会显示 AI 的每一步。可在「观战 AI」中调速度或暂停。进入手动试玩会暂停训练，回到训练区可继续。</p>' +
-    '<p>「方块推推推」用推头把箱子推进目标。无电源时直接点推头。有电源时点箭头指向相邻推头的电源。推头沿自己的箭头推一格，开启连推可以推动前方连续的多个方块。</p>' +
+    '<p>「方块推推推」用拉推头把箱子移到目标。无电源时点拉推头。有电源时点箭头指向拉推头的电源。正前一格有方块就向前推，空一格则把第二格的方块拉近。开启连推可以推动前方连续的多个方块。</p>' +
     '<p>点「示范几步」录下开局或通关路线，再点「保存示范」。胜率只统计 AI 独立尝试。</p>' +
     '<p>AI 用 Q-learning 反复练习。训练区包含已绘制的地图和外围三格空地，最多 40,000 格。找到通关路线后即可回放。</p>' +
     '<p>用关卡列表逐关训练。切换时会暂停当前训练，切回即可继续。示范、地图和规则保存在浏览器。修改地图或规则会清空当前关的示范和训练进度。</p>',
