@@ -268,8 +268,9 @@
 
   function playerPortal(map, state, occupied, player, direction) {
     const host = map.adjacent(player, direction);
-    const canEnter = map.isWall(host) || (occupied.has(host) && map.isWall(map.adjacent(host, direction)));
-    return canEnter ? portalOn(map, state, host, opposite(direction)) : -1;
+    if (!map.isWall(host) && !occupied.has(host)) return -1;
+    // portalStep tries every box move before letting the player enter the touched face.
+    return portalOn(map, state, host, opposite(direction));
   }
 
   function portalStep(map, state, direction) {
