@@ -331,11 +331,11 @@
     return movingFaces(map, portalCells).entries.get(cell)?.[side] ?? -1;
   }
 
-  function tracePortalExit(map, portalCells, entrance, occupied, player, visited, removed) {
-    const pairs = new Set();
+  function tracePortalExit(map, portalCells, entrance, { occupied, player, visited, removed } = {}) {
+    const pairs = new Set(visited);
     while (entrance >= 0) {
       const pair = entrance >> 1;
-      if (pairs.has(pair) || visited?.has(pair)) return null;
+      if (pairs.has(pair)) return null;
       pairs.add(pair);
       const exit = entrance ^ 1;
       const direction = map.portalSides[exit];
@@ -347,7 +347,7 @@
         entrance = fixed ? fixed.entrance : portalOn(map, portalCells, cell, opposite(direction));
         continue;
       }
-      if (cell !== removed && occupied.has(cell)) {
+      if (cell !== removed && occupied?.has(cell)) {
         const facing = portalOn(map, portalCells, cell, opposite(direction));
         if (facing >= 0) {
           const landing = pushLanding(map, cell, direction, occupied);
@@ -390,16 +390,20 @@
       const pushed = pushThroughPortal(map, state, occupied, first, direction);
       if (pushed !== state) return pushed;
     }
-    const playerEntrance = portalOn(map, state.portalCells, first, opposite(direction));
-    if (playerEntrance >= 0) {
-      occupied ??= new Set(state.boxes);
-      const exit = tracePortalExit(map, state.portalCells, playerEntrance, occupied, state.player);
+    let entrance = portalOn(map, state.portalCells, first, opposite(direction));
+    if (entrance < 0) return state;
+    occupied ??= new Set(state.boxes);
+    let visited;
+    while (entrance >= 0) {
+      const exit = tracePortalExit(map, state.portalCells, entrance, { visited });
       if (!exit || exit.cell === state.player) return state;
-      const player = exit.cell;
-      if (occupied.has(player)) {
-        return pushThroughPortal(map, state, occupied, player, exit.direction, exit.pairs);
-      }
-      return { ...state, player, moves: state.moves + 1 };
+      if (!occupied.has(exit.cell)) return { ...state, player: exit.cell, moves: state.moves + 1 };
+
+      // A blocked straight push can still send a box through another portal.
+      const pushed = pushThroughPortal(map, state, occupied, exit.cell, exit.direction, exit.pairs);
+      if (pushed !== state) return pushed;
+      entrance = portalOn(map, state.portalCells, exit.cell, opposite(exit.direction));
+      visited = exit.pairs;
     }
     return state;
   }
@@ -472,14 +476,18 @@
       if (cargo !== undefined) {
         if (state.portalCells[entrance ^ 1] === cargo) continue;
         const projected = moved.size ? new Set(boxes) : occupied;
-        const exit = tracePortalExit(map, portalCells, entrance, projected, state.player, visited, moved.size ? undefined : cargo);
+        const exit = tracePortalExit(map, portalCells, entrance, {
+          occupied: projected, player: state.player, visited, removed: moved.size ? undefined : cargo,
+        });
         if (!exit || exit.cell === cargo || exit.cell === state.player) continue;
         const landing = exit.cell;
         if (projected.has(landing)) {
           // Relay the push first. Local boxes stay put for this input.
-          const relay = moved.size ? tracePortalExit(map, state.portalCells, entrance, occupied, state.player, visited) : exit;
+          const relay = moved.size ? tracePortalExit(map, state.portalCells, entrance, {
+            occupied, player: state.player, visited,
+          }) : exit;
           if (relay && occupied.has(relay.cell)) {
-            tryFrom(relay.cell, relay.direction, new Set([...visited, ...relay.pairs]));
+            tryFrom(relay.cell, relay.direction, relay.pairs);
           }
           continue;
         }
