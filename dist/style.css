@@ -75,7 +75,7 @@ h2 { margin: 0; font-size: 19px; letter-spacing: .025em; line-height: 1.35; }
 .board.editable:not(.panning) .cell:hover { outline: 1px solid var(--green); outline-offset: -1px; z-index: 1; }
 .board.panning, .board.panning .cell { cursor: grabbing; }
 .board.linking .cell[data-tile="#"], .board.linking .cell[data-tile="$"], .board.linking .cell[data-tile="*"] { cursor: crosshair; }
-.viewport-tools { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; color: var(--muted); font-size: 12px; }
+.viewport-tools { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px; color: var(--muted); font-size: 12px; }
 .cell > i { position: absolute; width: 71%; height: 71%; pointer-events: none; }
 .device { display: inline-grid; place-items: center; font-style: normal; font-weight: 800; border-radius: 4px; }
 .cell > .device { width: 75%; height: 75%; font-size: 17px; }

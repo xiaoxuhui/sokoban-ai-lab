@@ -6,6 +6,11 @@ const board = $('board');
 const grid = $('grid');
 const dialog = $('dialog');
 const storageKey = 'sokoban-lab-levels-v1';
+const followAiKey = 'sokoban-lab-follow-ai-v1';
+const aiFollow = $('ai-follow');
+try {
+  aiFollow.checked = localStorage.getItem(followAiKey) !== 'off';
+} catch { /* The control also works without storage. */ }
 const recordBudget = 'next-record';
 const number = new Intl.NumberFormat('zh-CN');
 const brushButtons = [...document.querySelectorAll('[data-brush]')];
@@ -98,6 +103,10 @@ function followPosition(state) {
       Math.abs(y + 0.5 - camera.y) > viewHeight / size / 2 - 1.5) {
     camera = { x: x + 0.5, y: y + 0.5 };
   }
+}
+
+function followAi(state) {
+  if (aiFollow.checked && !gesture?.pan) followPosition(state);
 }
 
 function layoutBoard() {
@@ -282,6 +291,7 @@ function renderMap() {
   $('play-tools').hidden = !playing;
   $('watch-tools').hidden = !watching;
   $('replay-tools').hidden = mode !== 'replay';
+  $('ai-follow-option').hidden = !watching && mode !== 'replay';
   $('map-actions').hidden = !editing;
   $('dpad').hidden = !playing || state.player === -1;
   $('record-tools').hidden = !recording;
@@ -382,7 +392,7 @@ function setMode(next) {
   if (mode === 'watch') {
     nextWatchAt = 0;
     if (!watchState && trainer) syncWatchState();
-    followPosition(activeState());
+    followAi(activeState());
   }
   renderMap();
   renderTraining();
@@ -759,8 +769,17 @@ new ResizeObserver(() => {
 }).observe(board);
 $('center-map').addEventListener('click', () => {
   centerMap();
-  if (mode !== 'edit') followPosition(activeState());
+  if (mode === 'play') followPosition(activeState());
+  else if (mode === 'watch' || mode === 'replay') followAi(activeState());
   renderBoard(activeState());
+});
+aiFollow.addEventListener('change', () => {
+  try {
+    localStorage.setItem(followAiKey, aiFollow.checked ? 'on' : 'off');
+  } catch { /* Camera movement is independent of storage. */ }
+  const state = activeState();
+  followAi(state);
+  renderBoard(state);
 });
 
 brushButtons.forEach(button => {
@@ -1083,7 +1102,7 @@ function trainFrame(now) {
   if (batchComplete()) running = false;
   if (advanced) {
     if (mode === 'watch') {
-      if (!gesture?.pan) followPosition(watchState);
+      followAi(watchState);
       renderMap();
     }
     renderTraining();
@@ -1213,7 +1232,7 @@ function showReplayStep(index) {
   const { states } = replay;
   if (index === states.length) states.push(step(map, states[index - 1], replayPath()[index - 1]));
   replay.index = index;
-  if (!gesture?.pan) followPosition(states[index]);
+  followAi(states[index]);
 }
 
 function stepReplay(delta) {
