@@ -6,9 +6,9 @@
   <meta name="description" content="绘制自定义地图，手动试玩，观察 AI 通过强化学习掌握推箱子。">
   <meta name="theme-color" content="#111715">
   <title>推箱子实验室</title>
-  <link rel="stylesheet" href="style.css?v=29">
+  <link rel="stylesheet" href="style.css?v=31">
   <script src="engine.js?v=29" defer></script>
-  <script src="app.js?v=30" defer></script>
+  <script src="app.js?v=31" defer></script>
 </head>
 <body>
   <header class="top">
@@ -80,6 +80,13 @@
           </div>
         </div>
 
+        <div class="map-toolbar tools-group replay-tools" id="replay-tools" role="group" aria-label="AI 路线回放" hidden>
+          <button class="outline" id="replay-prev" type="button">上一步</button>
+          <button class="outline" id="replay-next" type="button">下一步</button>
+          <button class="outline" id="replay-toggle" type="button">自动播放</button>
+          <div class="move-count" id="replay-progress" role="status"></div>
+        </div>
+
         <div class="stage board" id="board" role="group" aria-label="无限推箱子地图" aria-describedby="pan-help">
           <div id="grid" class="grid"></div>
         </div>
@@ -87,7 +94,6 @@
 
         <div class="map-footer">
           <div class="map-note" id="map-note" role="status"></div>
-          <button class="plain" id="stop-replay" type="button" hidden>停止回放</button>
           <div class="tools-group record-tools" id="record-tools" hidden>
             <button class="plain" id="cancel-demo" type="button">取消</button>
             <button class="primary" id="save-demo" type="button" disabled>保存示范</button>
@@ -146,7 +152,10 @@
           <button class="primary" id="train" type="button"><span aria-hidden="true">▶</span><b>开始训练</b></button>
           <button class="outline square" id="clear-training" type="button" title="清除训练" aria-label="清除训练" disabled>↻</button>
         </div>
-        <button class="outline replay" id="replay" type="button" disabled><span aria-hidden="true">▷</span> 回放最佳通关</button>
+        <div class="replay-actions">
+          <button class="outline" id="replay" type="button" disabled>回放最佳通关</button>
+          <button class="outline" id="replay-single" type="button" disabled>单步查看</button>
+        </div>
         <div class="partial-controls" id="partial-controls" hidden>
           <label for="partial-route" id="partial-summary"></label>
           <select id="partial-route"></select>

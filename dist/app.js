@@ -55,8 +55,7 @@ let watchSegment = null;
 let watchResult = null;
 let nextWatchAt = 0;
 let playback = 0;
-let replayState = null;
-let replayMessage = '';
+let replay = null;
 let listedRoutes = null;
 let listedCount = 0;
 let gesture = null;
@@ -247,7 +246,7 @@ function renderMap() {
   $('undo-edit').disabled = !pendingPortal && !editHistories.get(level)?.length;
   $('play-tools').hidden = !playing;
   $('watch-tools').hidden = !watching;
-  $('stop-replay').hidden = mode !== 'replay' || !playback;
+  $('replay-tools').hidden = mode !== 'replay';
   $('map-actions').hidden = !editing;
   $('dpad').hidden = !playing;
   $('record-tools').hidden = !recording;
@@ -267,8 +266,9 @@ function renderMap() {
   const problem = editing || watching ? validate(map) || (watching ? trainingProblem : '') : '';
   const solved = !editing && won(map, state);
   const note = problem || (editing ? '地图可试玩和训练' :
-    watching ? watchNote(state, solved) : replayMessage);
+    watching ? watchNote(state, solved) : '');
   setMapNote(note, problem ? 'error' : solved ? 'success' : '');
+  if (mode === 'replay') renderReplayControls(state, solved);
   if (watching) {
     const episode = Math.min((trainer?.episodes ?? 0) + Number(watchResult === null), target);
     $('watch-progress').textContent = (episode ? '第 ' + number.format(episode) + ' 回合 · ' : '') +
@@ -324,8 +324,8 @@ function setMode(next) {
     $('map-note').textContent = validate(map);
     return;
   }
-  clearTimeout(playback);
-  playback = 0;
+  pauseReplay();
+  replay = null;
   if (next !== 'play') recording = false;
   if (next !== 'edit') {
     pendingPortal = null;
@@ -392,8 +392,8 @@ function loadBoard(recenter) {
 
 function stopActivity() {
   pauseTraining();
-  clearTimeout(playback);
-  playback = 0;
+  pauseReplay();
+  replay = null;
 }
 
 function selectLevel(index) {
@@ -664,7 +664,8 @@ board.addEventListener('click', event => {
 
 function activeState() {
   if (mode === 'watch') return watchState ?? map.initial;
-  return mode === 'edit' ? map.initial : mode === 'play' ? manual : replayState;
+  if (mode === 'replay') return replay.states[replay.index];
+  return mode === 'play' ? manual : map.initial;
 }
 
 new ResizeObserver(() => {
@@ -874,6 +875,7 @@ function renderTraining() {
   $('budget').disabled = running || paused;
   $('clear-training').disabled = !trainer || playback !== 0 || recording;
   $('replay').disabled = !best || running || playback !== 0 || recording;
+  $('replay-single').disabled = $('replay').disabled;
   renderPartialRoutes(best);
   const demoLength = level.demonstration?.length ?? 0;
   $('demo-summary').textContent = demoLength ? '已保存 ' + demoLength + ' 步 · 每两回合使用一次' : '演示几步，帮 AI 练习下一步。';
@@ -1024,6 +1026,9 @@ $('clear-training').addEventListener('click', () => {
 $('replay').addEventListener('click', () => {
   if (trainer?.best) replayRoutes([trainer.best]);
 });
+$('replay-single').addEventListener('click', () => {
+  if (trainer?.best) replayRoutes([trainer.best], 0, false);
+});
 $('play-partial').addEventListener('click', () => {
   const route = Array.from(trainer?.partial.routes.values() ?? [])[$('partial-route').selectedIndex];
   if (route) replayRoutes([route], $('partial-route').selectedIndex + 1);
@@ -1031,55 +1036,87 @@ $('play-partial').addEventListener('click', () => {
 $('play-sequence').addEventListener('click', () => {
   if (trainer?.partial.routes.size) replayRoutes([...trainer.partial.routes.values()], 1);
 });
-$('stop-replay').addEventListener('click', () => {
-  clearTimeout(playback);
-  playback = 0;
-  replayMessage = '已停止回放';
+$('replay-toggle').addEventListener('click', () => {
+  if (playback) pauseReplay();
+  else scheduleReplay();
   renderMap();
   renderTraining();
 });
+$('replay-prev').addEventListener('click', () => stepReplay(-1));
+$('replay-next').addEventListener('click', () => stepReplay(1));
 
-function replayRoutes(routes, firstNumber = 0) {
+function pauseReplay() {
+  clearTimeout(playback);
+  playback = 0;
+}
+
+function replayRoutes(routes, firstNumber = 0, autoplay = true) {
   if (running || playback || recording) return;
+  pendingPortal = null;
+  portalMessage = '';
   mode = 'replay';
-  let routeIndex = 0;
-  let index = 0;
-
-  function startRoute() {
-    replayState = map.initial;
-    index = 0;
-    followPlayer(replayState);
-    tick();
-  }
-
-  function tick() {
-    const { path } = routes[routeIndex];
-    const title = firstNumber ? '路线 ' + number.format(firstNumber + routeIndex) : 'AI 回放';
-    if (index === path.length) {
-      replayMessage = won(map, replayState) ? 'AI 通关 · 移动 ' + index + ' 步 · 推箱 ' + replayState.pushes + ' 次' :
-        title + ' · ' + index + ' 步 · 覆盖 ' + placed(map, replayState) + ' / ' + map.goals.size + ' 个目标';
-      playback = routeIndex + 1 < routes.length ? setTimeout(() => {
-        routeIndex++;
-        startRoute();
-      }, 650) : 0;
-      renderMap();
-      renderTraining();
-      return;
-    }
-    replayMessage = title + ' · ' + index + ' / ' + path.length + ' 步';
-    playback = setTimeout(() => {
-      replayState = step(map, replayState, path[index]);
-      if (!gesture?.pan) followPlayer(replayState);
-      index++;
-      tick();
-    }, 115);
-    renderMap();
-  }
-
-  startRoute();
+  replay = { routes, firstNumber, routeIndex: 0, index: 0, states: [map.initial] };
+  showReplayStep(0);
+  if (autoplay) scheduleReplay();
+  renderMap();
   renderTraining();
   const view = board.getBoundingClientRect();
   if (view.top < 0 || view.top >= window.innerHeight) board.scrollIntoView({ block: 'center' });
+}
+
+function replayPath() {
+  return replay.routes[replay.routeIndex].path;
+}
+
+function renderReplayControls(state, solved) {
+  const { index, firstNumber, routeIndex, routes } = replay;
+  const length = replayPath().length;
+  const atEnd = index === length;
+  $('replay-prev').disabled = index === 0;
+  $('replay-next').disabled = atEnd;
+  $('replay-toggle').disabled = atEnd && routeIndex === routes.length - 1;
+  const toggleLabel = playback ? '暂停' : '自动播放';
+  if ($('replay-toggle').textContent !== toggleLabel) $('replay-toggle').textContent = toggleLabel;
+  const title = firstNumber ? '路线 ' + number.format(firstNumber + routeIndex) : 'AI 回放';
+  let progress = title + ' · ' + index + ' / ' + length + ' 步';
+  if (atEnd) progress += solved ? ' · 通关 · 推箱 ' + state.pushes + ' 次' :
+    ' · 覆盖 ' + placed(map, state) + ' / ' + map.goals.size + ' 个目标';
+  if ($('replay-progress').textContent !== progress) $('replay-progress').textContent = progress;
+}
+
+function showReplayStep(index) {
+  const { states } = replay;
+  if (index === states.length) states.push(step(map, states[index - 1], replayPath()[index - 1]));
+  replay.index = index;
+  if (!gesture?.pan) followPlayer(states[index]);
+}
+
+function stepReplay(delta) {
+  const index = replay.index + delta;
+  if (index < 0 || index > replayPath().length) return;
+  const wasPlaying = Boolean(playback);
+  pauseReplay();
+  showReplayStep(index);
+  renderMap();
+  if (wasPlaying) renderTraining();
+}
+
+function scheduleReplay() {
+  const atEnd = replay.index === replayPath().length;
+  if (atEnd && replay.routeIndex === replay.routes.length - 1) {
+    playback = 0;
+    renderTraining();
+    return;
+  }
+  playback = setTimeout(() => {
+    if (atEnd) {
+      replay.routeIndex++;
+      replay.states = [map.initial];
+      showReplayStep(0);
+    } else showReplayStep(replay.index + 1);
+    scheduleReplay();
+    renderMap();
+  }, atEnd ? 650 : 115);
 }
 new ResizeObserver(drawChart).observe($('chart'));
 

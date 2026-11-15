@@ -152,8 +152,10 @@ select { padding: 6px 8px; }
 .primary:not(:disabled):hover { background: #d0ffa2; }
 .primary span { font-size: 11px; margin-right: 7px; }
 .square { font-size: 20px; color: var(--muted); }
-.replay { width: 100%; margin-top: 8px; padding: 8px; font-size: 13px; }
-.replay span { color: var(--green); margin-right: 3px; }
+.replay-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; margin-top: 8px; }
+.replay-actions button, .replay-tools button { padding: 8px; font-size: 13px; }
+.replay-tools { align-items: center; flex-wrap: wrap; gap: 6px; }
+.replay-tools .move-count { margin-left: 4px; }
 .partial-controls { display: grid; gap: 7px; margin-top: 9px; color: var(--muted); font-size: 12px; }
 .partial-controls .outline, .save-actions .outline { padding: 7px 9px; }
 .save-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
