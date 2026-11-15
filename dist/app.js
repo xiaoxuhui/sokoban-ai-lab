@@ -434,25 +434,24 @@ function addLevels(entries) {
   selectLevel(first);
 }
 
-function editMap(tiles, recenter = false, chainPush = level.chainPush, portals = level.portals ?? [], finish = map.finish) {
+function editMap(changes, recenter = false) {
   let history = editHistories.get(level);
   if (!history) {
     history = [];
     editHistories.set(level, history);
   }
-  if (!gesture?.edit || history.at(-1) !== gesture.edit) {
-    const snapshot = {
-      tiles: level.tiles,
-      chainPush: level.chainPush,
-      portals: level.portals ?? [],
-      finish: map.finish,
-      demonstration: level.demonstration,
-    };
+  let snapshot = history.at(-1);
+  if (!gesture?.edit || snapshot !== gesture.edit) {
+    snapshot = { demonstration: level.demonstration ?? [] };
     history.push(snapshot);
     if (history.length > 100) history.shift();
     if (gesture && !gesture.pan) gesture.edit = snapshot;
   }
-  changeMap(tiles, recenter, chainPush, portals, finish);
+  // A single brush stroke can change different fields as it crosses the map.
+  for (const field of Object.keys(changes)) {
+    if (!Object.hasOwn(snapshot, field)) snapshot[field] = level[field];
+  }
+  changeMap(changes, recenter);
 }
 
 function undoEdit() {
@@ -463,21 +462,17 @@ function undoEdit() {
   }
   const snapshot = editHistories.get(level)?.pop();
   if (!snapshot) return;
-  changeMap(snapshot.tiles, false, snapshot.chainPush, snapshot.portals, snapshot.finish, snapshot.demonstration);
+  changeMap(snapshot, false);
 }
 
-function changeMap(tiles, recenter, chainPush, portals, finish, demonstration = []) {
+function changeMap(changes, recenter) {
   stopActivity();
   sessions.delete(level);
   trainer = null;
   trainingProblem = '';
   attempt = null;
   target = 0;
-  level.tiles = tiles;
-  level.chainPush = chainPush;
-  level.portals = portals;
-  level.finish = finish;
-  level.demonstration = demonstration;
+  Object.assign(level, { demonstration: [] }, changes);
   saveLevels();
   loadBoard(recenter);
 }
@@ -485,7 +480,7 @@ function changeMap(tiles, recenter, chainPush, portals, finish, demonstration = 
 $('current-level').addEventListener('change', event => selectLevel(Number(event.target.value)));
 $('prev-level').addEventListener('click', () => selectLevel(library.index - 1));
 $('next-level').addEventListener('click', () => selectLevel(library.index + 1));
-$('chain-push').addEventListener('change', event => editMap(map.tiles, false, event.target.checked));
+$('chain-push').addEventListener('change', event => editMap({ chainPush: event.target.checked }));
 $('undo-edit').addEventListener('click', undoEdit);
 
 function paint(coordinate) {
@@ -496,11 +491,11 @@ function paint(coordinate) {
       $('map-note').classList.add('error');
       return;
     }
-    editMap(map.tiles, false, level.chainPush, level.portals, map.finish === coordinate ? null : coordinate);
+    editMap({ finish: map.finish === coordinate ? null : coordinate });
     return;
   }
   if (brush === ' ' && map.finish === coordinate) {
-    editMap(map.tiles, false, level.chainPush, level.portals, null);
+    editMap({ finish: null });
     return;
   }
   const wasGoal = '.*+'.includes(old);
@@ -525,7 +520,7 @@ function paint(coordinate) {
   const removed = new Set();
   if (!sameHost) portals.forEach((end, i) => { if (end.cell === coordinate) removed.add(Math.floor(i / 2)); });
   const finish = tile === '#' && map.finish === coordinate ? null : map.finish;
-  editMap(tiles, false, level.chainPush, portals.filter((_, i) => !removed.has(Math.floor(i / 2))), finish);
+  editMap({ tiles, portals: portals.filter((_, i) => !removed.has(Math.floor(i / 2))), finish });
 }
 
 function cellAt(element) {
@@ -556,7 +551,7 @@ function choosePortalFace(coordinate, side) {
     portalMessage = '这条边已有去向，请选择另一条边。';
   } else {
     const exit = oneWay ? { cell: coordinate, side, exitOnly: true } : { cell: coordinate, side };
-    editMap(map.tiles, false, level.chainPush, [...portals, pendingPortal, exit]);
+    editMap({ portals: [...portals, pendingPortal, exit] });
     portalMessage = (oneWay ? '单向' : '双向') + '传送门 ' + (portals.length / 2 + 1) + ' 已建立，可按 Z 撤销。';
   }
   renderMap();
@@ -580,7 +575,7 @@ function managePortalFace(coordinate, side, portals, hasEntrance) {
     const number = i / 2 + 1;
     const kind = to.exitOnly ? (atFace(from) ? '单向入口' : '单向出口') : '双向门';
     list.append(actionButton('移除' + kind + ' ' + number, '', () => {
-      editMap(map.tiles, false, level.chainPush, portals.filter((_, index) => index !== i && index !== i + 1));
+      editMap({ portals: portals.filter((_, index) => index !== i && index !== i + 1) });
       dialog.close();
     }));
   }
@@ -1188,12 +1183,12 @@ function confirmSaveChange(deleting) {
     actionButton('返回', 'outline plain', manageSave),
     actionButton('确认' + verb, 'primary danger', () => {
       if (deleting) deleteLevel();
-      else editMap(new Map(), true, false, [], null);
+      else editMap({ tiles: new Map(), portals: [], finish: null }, true);
       dialog.close();
     }),
   ]);
   $('save-confirm').textContent = deleting ? '删除「' + level.name + '」及其地图、示范和训练进度？' :
-    '将「' + level.name + '」恢复成空白地图？名称会保留，规则、示范和训练进度会重置。';
+    '将「' + level.name + '」恢复成空白地图？名称和规则设置会保留，示范和训练进度会重置。';
 }
 
 function manageSave() {
@@ -1238,7 +1233,7 @@ $('map-code').addEventListener('click', () => {
     actionButton('导入文本', 'primary', () => {
       try {
         const imported = readLevel($('map-text').value);
-        editMap(imported.tiles, true, imported.chainPush, imported.portals ?? [], imported.finish ?? null);
+        editMap({ portals: [], finish: null, ...imported }, true);
         dialog.close();
       } catch (error) {
         dialogError(error.message);
