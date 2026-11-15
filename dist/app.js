@@ -6,6 +6,7 @@ const board = $('board');
 const grid = $('grid');
 const dialog = $('dialog');
 const storageKey = 'sokoban-lab-levels-v1';
+const recordBudget = 'next-record';
 const number = new Intl.NumberFormat('zh-CN');
 
 function loadLevels() {
@@ -48,7 +49,7 @@ let trainer = null;
 let trainingProblem = '';
 let attempt = null;
 let running = false;
-let target = 0;
+let batch = null;
 let frame = 0;
 let watchState = null;
 let watchSegment = null;
@@ -270,7 +271,7 @@ function renderMap() {
   setMapNote(note, problem ? 'error' : solved ? 'success' : '');
   if (mode === 'replay') renderReplayControls(state, solved);
   if (watching) {
-    const episode = Math.min((trainer?.episodes ?? 0) + Number(watchResult === null), target);
+    const episode = Math.min((trainer?.episodes ?? 0) + Number(watchResult === null), batch?.target ?? 0);
     $('watch-progress').textContent = (episode ? '第 ' + number.format(episode) + ' 回合 · ' : '') +
       (watchSegment?.demonstration ? '跟随示范 · ' : '') +
       '移动 ' + state.moves + ' 步 · 推箱 ' + state.pushes + ' 次';
@@ -312,7 +313,7 @@ function objectiveProgress(state, covered = placed(map, state)) {
 function watchNote(state, solved) {
   if (!trainer) return '开始训练后，可在这里看 AI 走位和推箱。';
   const position = objectiveProgress(state);
-  if (!running && trainer.episodes >= target) return '本批训练完成 · ' + position;
+  if (!running && batchComplete()) return '本批训练完成 · ' + position;
   if (!running) return '训练已暂停 · ' + position;
   if (solved) return '本回合通关';
   if (watchResult === false) return '本回合未通关，AI 将重新尝试';
@@ -399,7 +400,7 @@ function stopActivity() {
 function selectLevel(index) {
   if (!library.entries[index] || index === library.index) return;
   stopActivity();
-  if (trainer || trainingProblem) sessions.set(level, { trainer, trainingProblem, attempt, target });
+  if (trainer || trainingProblem) sessions.set(level, { trainer, trainingProblem, attempt, batch });
   activateLevel(index);
 }
 
@@ -410,7 +411,8 @@ function activateLevel(index) {
   trainer = session?.trainer ?? null;
   trainingProblem = session?.trainingProblem ?? '';
   attempt = session?.attempt ?? null;
-  target = session?.target ?? 0;
+  batch = session?.batch ?? null;
+  if (!batchComplete()) $('budget').value = batch.option;
   saveLevels();
   renderLevelPicker();
   loadBoard(true);
@@ -471,7 +473,7 @@ function changeMap(changes, recenter) {
   trainer = null;
   trainingProblem = '';
   attempt = null;
-  target = 0;
+  batch = null;
   Object.assign(level, { demonstration: [] }, changes);
   saveLevels();
   loadBoard(recenter);
@@ -849,11 +851,17 @@ function drawChart() {
   context.fill();
 }
 
+function batchComplete() {
+  if (!batch) return true;
+  return batch.option === recordBudget ? trainer.best !== batch.previousBest : trainer.episodes >= batch.target;
+}
+
 function renderTraining() {
   const episodes = trainer?.episodes ?? 0;
   const best = trainer?.best;
   const problem = validate(map) || trainingProblem;
-  const paused = !running && target > episodes;
+  const paused = !running && !batchComplete();
+  const waitingForRecord = batch?.option === recordBudget;
   const status = running ? '训练中' : paused ? '已暂停' : episodes ? '批次完成' : '待训练';
   const pill = $('train-status');
   if (pill.lastElementChild.textContent !== status) pill.lastElementChild.textContent = status;
@@ -867,7 +875,7 @@ function renderTraining() {
   $('watch-run').textContent = action;
   $('watch-run').disabled = $('train').disabled;
   $('train').firstElementChild.textContent = running ? 'Ⅱ' : '▶';
-  $('budget').disabled = running || paused;
+  $('budget').disabled = running || (paused && !waitingForRecord);
   $('clear-training').disabled = !trainer || playback !== 0 || recording;
   $('replay').disabled = !best || running || playback !== 0 || recording;
   $('replay-single').disabled = $('replay').disabled;
@@ -881,7 +889,10 @@ function renderTraining() {
 
   let note = '训练当前关卡，找到通关路线后即可回放。';
   if (problem) note = problem;
-  else if (running || paused) note = '本批目标为第 ' + number.format(target) + ' 回合，切换关卡时会暂停。';
+  else if ((running || paused) && waitingForRecord) note = batch.previousBest ?
+    '本批会在最佳路线更新后停止。' : '本批会在首次通关后停止。';
+  else if (running || paused) note = '本批目标为第 ' + number.format(batch.target) + ' 回合，切换关卡时会暂停。';
+  else if (waitingForRecord && best) note = '最佳路线已更新 · 推箱 ' + best.pushes + ' 次 · 移动 ' + best.path.length + ' 步';
   else if (best) note = '已通关 ' + number.format(trainer.successes) + ' 局 · 最佳路线移动 ' + best.path.length + ' 步';
   else if (episodes) note = '尚未通关，可以查看目前覆盖最多的路线。';
   $('training-note').textContent = note;
@@ -931,7 +942,7 @@ function trainFast() {
   do {
     attempt ??= trainer.attempt();
     if (attempt.next().done) attempt = null;
-  } while (trainer.episodes < target && performance.now() < deadline);
+  } while (!batchComplete() && performance.now() < deadline);
   watchState = null;
   if (mode === 'watch') syncWatchState();
 }
@@ -965,7 +976,7 @@ function trainFrame(now) {
   if (!running) return;
   const delay = mode === 'watch' ? Number($('watch-speed').value) : 0;
   const advanced = delay ? trainVisible(now, delay) : (trainFast(), true);
-  if (trainer.episodes >= target) running = false;
+  if (batchComplete()) running = false;
   if (advanced) {
     if (mode === 'watch') {
       if (!gesture?.pan) followPlayer(watchState);
@@ -990,7 +1001,11 @@ function toggleTraining() {
       }
       trainer.setDemonstration(level.demonstration ?? []);
     }
-    if (trainer.episodes >= target) target = trainer.episodes + Number($('budget').value);
+    const option = $('budget').value;
+    if (batchComplete() || batch.option !== option) {
+      batch = option === recordBudget ? { option, target: Infinity, previousBest: trainer.best } :
+        { option, target: trainer.episodes + Number(option) };
+    }
     running = true;
     setMode('watch');
     const view = board.getBoundingClientRect();
@@ -1008,7 +1023,7 @@ $('clear-training').addEventListener('click', () => {
   sessions.delete(level);
   trainer = null;
   attempt = null;
-  target = 0;
+  batch = null;
   watchState = null;
   watchSegment = null;
   watchResult = null;
