@@ -108,7 +108,7 @@ h2 { margin: 0; font-size: 19px; letter-spacing: .025em; line-height: 1.35; }
 .map-note.success { color: var(--green); }
 .tools-group { display: flex; gap: 2px; }
 .plain { padding: 5px 8px; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12px; white-space: nowrap; }
-.dpad { display: flex; gap: 4px; }
+.dpad { display: flex; gap: 4px; touch-action: manipulation; }
 .dpad button { min-width: 37px; min-height: 35px; border: 1px solid var(--line); border-radius: 6px; background: var(--well); color: var(--green); font-size: 16px; }
 .dpad button:hover { background: #2a392b; }
 .status-pill { border: 1px solid #364538; background: #243127; color: #b4c3b4; border-radius: 99px; padding: 5px 9px; display: flex; align-items: center; gap: 6px; font-size: 11px; white-space: nowrap; }

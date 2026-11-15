@@ -40,6 +40,7 @@ let mode = 'edit';
 let manual = map.initial;
 let undo = [];
 let manualPath = [];
+const heldDirections = new Set();
 let recording = false;
 let trainer = null;
 let trainingProblem = '';
@@ -96,12 +97,13 @@ function layoutBoard() {
   const startY = Math.floor(top);
   const columns = Math.ceil(left + board.clientWidth / size) - startX;
   const rowCount = Math.ceil(top + board.clientHeight / size) - startY;
-  const signature = [startX, startY, columns, rowCount].join(',');
-  grid.style.setProperty('--cell-size', size + 'px');
-  grid.style.setProperty('--cols', columns);
-  grid.style.transform = 'translate(' + (startX - left) * size + 'px,' + (startY - top) * size + 'px)';
+  const signature = [startX, startY, columns, rowCount, size].join(',');
+  const transform = 'translate(' + (startX - left) * size + 'px, ' + (startY - top) * size + 'px)';
+  if (grid.style.transform !== transform) grid.style.transform = transform;
   if (signature === visibleArea) return;
   visibleArea = signature;
+  grid.style.setProperty('--cell-size', size + 'px');
+  grid.style.setProperty('--cols', columns);
   const nextCells = new Map();
   for (let y = startY; y < startY + rowCount; y++) {
     for (let x = startX; x < startX + columns; x++) {
@@ -168,8 +170,8 @@ function renderBoard(state) {
       cell.setAttribute('aria-label', '坐标 ' + x + ', ' + y + '，' + tileName[tile] +
         (finish ? '，玩家终点' : '') + (label ? '，' + label : ''));
     }
-    cell.tabIndex = editable ? 0 : -1;
-    cell.disabled = !editable;
+    if (cell.tabIndex !== (editable ? 0 : -1)) cell.tabIndex = editable ? 0 : -1;
+    if (cell.disabled === editable) cell.disabled = !editable;
   });
 }
 
@@ -195,25 +197,22 @@ function renderMap() {
   $('stop-replay').hidden = mode !== 'replay' || !playback;
   $('map-actions').hidden = !editing;
   $('dpad').hidden = !playing;
-  $('undo').disabled = !undo.length;
-  $('reset-play').disabled = !manual.moves;
   $('record-tools').hidden = !recording;
-  $('save-demo').disabled = !manualPath.length;
   $('portal-cancel').hidden = !linking || !pendingPortal;
   $('portal-help').hidden = !linking;
   $('portal-help').textContent = portalMessage || (pendingPortal ? '已选第一端，再点墙或箱子的另一条边。' :
     '点墙或箱子的两条边配对。点击已有端点可移除整对。');
   $('map-info').textContent = '无限地图 · ' + map.initial.boxes.length + ' 个箱子 · ' + map.goals.size + ' 个目标';
   $('finish-status').textContent = map.finish === null ? '玩家终点可选' : '已设置玩家终点';
-  $('move-count').textContent = '移动 ' + manual.moves + ' 步 · 推箱 ' + manual.pushes + ' 次';
+  if (playing) {
+    renderManual();
+    return;
+  }
   const problem = editing || watching ? validate(map) || (watching ? trainingProblem : '') : '';
   const solved = !editing && won(map, state);
-  $('map-note').className = 'map-note' + (problem ? ' error' : solved ? ' success' : '');
   const note = problem || (editing ? '地图可试玩和训练' :
-    recording ? (solved ? '示范已通关，可以保存。' : '示范中。走几步或推几次箱后即可保存。') :
-    playing ? (solved ? '通关！' : objectiveProgress(state)) :
     watching ? watchNote(state, solved) : replayMessage);
-  if ($('map-note').textContent !== note) $('map-note').textContent = note;
+  setMapNote(note, problem ? 'error' : solved ? 'success' : '');
   if (watching) {
     const episode = Math.min((trainer?.episodes ?? 0) + Number(watchResult === null), target);
     $('watch-progress').textContent = (episode ? '第 ' + number.format(episode) + ' 回合 · ' : '') +
@@ -221,6 +220,25 @@ function renderMap() {
       '移动 ' + state.moves + ' 步 · 推箱 ' + state.pushes + ' 次';
   }
   renderBoard(state);
+}
+
+function setMapNote(message, status = '') {
+  const note = $('map-note');
+  const className = status ? 'map-note ' + status : 'map-note';
+  if (note.className !== className) note.className = className;
+  if (note.textContent !== message) note.textContent = message;
+}
+
+function renderManual() {
+  renderBoard(manual);
+  $('undo').disabled = !undo.length;
+  $('reset-play').disabled = !manual.moves;
+  $('save-demo').disabled = !manualPath.length;
+  $('move-count').textContent = '移动 ' + manual.moves + ' 步 · 推箱 ' + manual.pushes + ' 次';
+  const solved = won(map, manual);
+  const message = recording ? (solved ? '示范已通关，可以保存。' : '示范中。走几步或推几次箱后即可保存。') :
+    (solved ? '通关！' : objectiveProgress(manual));
+  setMapNote(message, solved ? 'success' : '');
 }
 
 function objectiveProgress(state) {
@@ -252,7 +270,10 @@ function setMode(next) {
     portalMessage = '';
   }
   mode = next;
-  if (mode === 'play') followPlayer(manual);
+  if (mode === 'play') {
+    pauseTraining();
+    followPlayer(manual);
+  }
   if (mode === 'watch') {
     nextWatchAt = 0;
     if (!watchState && trainer) syncWatchState();
@@ -563,26 +584,35 @@ function move(direction) {
   manualPath.push(direction);
   manual = next;
   followPlayer(manual);
-  renderMap();
+  renderManual();
 }
 
 document.querySelectorAll('[data-dir]').forEach(button => button.addEventListener('click', () => move(Number(button.dataset.dir))));
+const movementKeys = { arrowup: 0, w: 0, arrowright: 1, d: 1, arrowdown: 2, s: 2, arrowleft: 3, a: 3 };
+const keyIdentity = event => event.code || event.key.toLowerCase();
 document.addEventListener('keydown', event => {
   if (mode !== 'play' || dialog.open || event.altKey || event.ctrlKey || event.metaKey ||
       event.target.closest('input, textarea, select')) return;
-  const keys = { arrowup: 0, w: 0, arrowright: 1, d: 1, arrowdown: 2, s: 2, arrowleft: 3, a: 3 };
-  const direction = keys[event.key.toLowerCase()];
+  if (event.key === 'Enter' && event.repeat && event.target.closest('[data-dir]')) {
+    event.preventDefault();
+    return;
+  }
+  const direction = movementKeys[event.key.toLowerCase()];
   if (typeof direction !== 'number') return;
   event.preventDefault();
-  if (event.repeat) return;
+  const key = keyIdentity(event);
+  if (event.repeat || heldDirections.has(key)) return;
+  heldDirections.add(key);
   move(direction);
 });
+document.addEventListener('keyup', event => heldDirections.delete(keyIdentity(event)));
+window.addEventListener('blur', () => heldDirections.clear());
 $('undo').addEventListener('click', () => {
   if (!undo.length) return;
   manual = undo.pop();
   manualPath.pop();
   followPlayer(manual);
-  renderMap();
+  renderManual();
 });
 function resetPlay() {
   manual = map.initial;
@@ -947,7 +977,7 @@ $('help').addEventListener('click', () => {
     '<p>放置玩家起点和箱子目标，箱子数可以多于目标数。选「玩家终点」放置一面旗，再点旗子可移除。有旗时，玩家也要走到旗子处才能通关。只放旗子也可以做走位关卡。</p>' +
     '<p>点「手动试玩」，用方向键、WASD 或屏幕方向按钮移动。键盘每按一次走一步，长按时只走第一步。勾选「允许连推多个箱子」后，玩家和 AI 都能一步推动相邻的一整排箱子，计作一次推箱。</p>' +
     '<p>用「传送门」依次点选墙或箱子的两条边。同编号的两端双向相通。出口和另一个入口正对紧贴时，会继续通过下一对门。开启连推时，整排箱子先一起前进，最前面的箱子碰墙后才触发门箱传送。依次尝试后箱、前箱和玩家，没门或传不通就试下一项。前箱传走的同一步，门箱和它后面被推动的箱子会向前补一格。关闭连推时，门箱沿门面推到前箱就先传走前箱。没有可执行的推箱动作时，玩家可以从碰到的门面进入，即使门箱背后紧贴的是普通箱子。若最终出口有箱子并且推得动，玩家会在同一步穿门走到让出的格子。</p>' +
-    '<p>开始训练后，左侧地图会显示 AI 的每一步。可在「观战 AI」中调速度或暂停。切换到编辑或试玩时，AI 会继续加速训练。</p>' +
+    '<p>开始训练后，左侧地图会显示 AI 的每一步。可在「观战 AI」中调速度或暂停。进入手动试玩会暂停训练，回到训练区可继续。</p>' +
     '<p>点「示范几步」，从起点演示走位或推箱，再点「保存示范」。AI 每两回合会跟随示范一次，然后自行继续。胜率只统计独立尝试。</p>' +
     '<p>AI 用 Q-learning 反复练习。训练区包含已绘制的地图和外围三格空地，最多 40,000 格。找到通关路线后即可回放。</p>' +
     '<p>用关卡列表逐关训练。切换时会暂停当前训练，切回即可继续。示范、地图和规则保存在浏览器。修改地图或规则会清空当前关的示范和训练进度。</p>',
