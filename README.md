@@ -4,4 +4,4 @@
 
 通过本地静态文件服务器打开 `dist/index.html`。项目发行方式见 RELEASE_POLICY.md。
 
-许可条款尚待明确。
+采用 MIT 许可证，详见 LICENSE。
