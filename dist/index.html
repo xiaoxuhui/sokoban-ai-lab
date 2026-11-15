@@ -6,9 +6,9 @@
   <meta name="description" content="绘制自定义地图，手动试玩，观察 AI 通过强化学习掌握推箱子。">
   <meta name="theme-color" content="#111715">
   <title>推箱子实验室</title>
-  <link rel="stylesheet" href="style.css?v=23">
-  <script src="engine.js?v=28" defer></script>
-  <script src="app.js?v=28" defer></script>
+  <link rel="stylesheet" href="style.css?v=29">
+  <script src="engine.js?v=29" defer></script>
+  <script src="app.js?v=29" defer></script>
 </head>
 <body>
   <header class="top">
@@ -58,7 +58,11 @@
             <button type="button" data-brush=" " aria-pressed="false"><i class="sample eraser"></i>橡皮</button>
           </div>
           <div class="secondary" id="finish-status"></div>
-          <div class="portal-tools"><span id="portal-help" role="status" hidden></span><button class="plain" id="portal-cancel" type="button" hidden>取消选边</button></div>
+          <div class="portal-tools">
+            <label id="portal-direction-label" hidden>连接方向 <select id="portal-direction"><option value="two-way">双向</option><option value="one-way">单向</option></select></label>
+            <span id="portal-help" role="status" hidden></span>
+            <button class="plain" id="portal-cancel" type="button" hidden>取消选边</button>
+          </div>
         </div>
         <div class="map-toolbar play-tools" id="play-tools" hidden>
           <div class="move-count" id="move-count"></div>

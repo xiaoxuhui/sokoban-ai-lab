@@ -36,6 +36,7 @@ let area = bounds(map.tiles, map.finish);
 let brush = '#';
 let pendingPortal = null;
 let portalMessage = '';
+const oneWayPortal = $('portal-direction');
 let mode = 'edit';
 let manual = map.initial;
 let undo = [];
@@ -140,7 +141,8 @@ function renderBoard(state, previous = null) {
   state.portalCells.forEach((coordinate, index) => {
     if (changed && !changed.has(coordinate)) return;
     if (!marks.has(coordinate)) marks.set(coordinate, []);
-    marks.get(coordinate).push({ side: map.portalSides[index], pair: Math.floor(index / 2) + 1 });
+    const kind = map.portalIndex.exitOnly[index] ? 'exit' : map.portalIndex.exitOnly[index | 1] ? 'entry' : '';
+    marks.get(coordinate).push({ side: map.portalSides[index], pair: Math.floor(index / 2) + 1, kind });
   });
   if (linking && pendingPortal) {
     if (!marks.has(pendingPortal.cell)) marks.set(pendingPortal.cell, []);
@@ -153,7 +155,7 @@ function renderBoard(state, previous = null) {
       boxes?.has(coordinate) ? (goal ? '*' : '$') :
       state.player === coordinate ? (goal ? '+' : '@') : (goal ? '.' : ' ');
     const ends = marks.get(coordinate) ?? [];
-    const signature = ends.map(({ side, pair }) => side + ':' + pair).join(',');
+    const signature = ends.map(({ side, pair, kind }) => side + ':' + pair + (kind ? ':' + kind : '')).join(',');
     if (cell.dataset.tile !== tile || cell.dataset.portals !== signature || cell.classList.contains('finish-cell') !== finish) {
       cell.dataset.tile = tile;
       cell.dataset.portals = signature;
@@ -164,15 +166,10 @@ function renderBoard(state, previous = null) {
       if (goal) cell.append(makeTile('goal'));
       if ('$*'.includes(tile)) cell.append(makeTile(tile === '*' ? 'crate placed' : 'crate'));
       if ('@+'.includes(tile)) cell.append(makeTile('player'));
-      ends.forEach(({ side, pair }) => {
-        const mark = makeTile('portal-mark');
-        mark.dataset.side = side;
-        mark.dataset.tone = (pair - 1) % 4;
-        mark.textContent = pair || '·';
-        cell.append(mark);
-      });
+      if (ends.length) drawPortalMarks(cell, ends);
       const [x, y] = point(coordinate);
-      const label = ends.map(({ side, pair }) => sideNames[side] + (pair ? '传送门 ' + pair : '等待配对')).join('，');
+      const label = ends.map(({ side, pair, kind }) => sideNames[side] + (pair ?
+        (kind === 'entry' ? '单向入口 ' : kind === 'exit' ? '单向出口 ' : '双向传送门 ') + pair : '等待配对')).join('，');
       cell.setAttribute('aria-label', '坐标 ' + x + ', ' + y + '，' + tileName[tile] +
         (finish ? '，玩家终点' : '') + (label ? '，' + label : ''));
     }
@@ -190,6 +187,26 @@ function renderBoard(state, previous = null) {
       const cell = cells.get(coordinate);
       if (cell) drawCell(cell, coordinate);
     }
+  }
+}
+
+function drawPortalMarks(cell, ends) {
+  const faceGroups = new Map();
+  for (const end of ends) {
+    if (!faceGroups.has(end.side)) faceGroups.set(end.side, []);
+    faceGroups.get(end.side).push(end);
+  }
+  for (const [side, group] of faceGroups) {
+    const primary = group.find(end => !end.pair || end.kind !== 'exit') ?? group[0];
+    const { pair, kind } = primary;
+    const mark = makeTile('portal-mark');
+    mark.dataset.side = side;
+    mark.dataset.tone = (pair - 1) % 4;
+    if (kind) mark.dataset.kind = kind;
+    if (!pair) mark.textContent = '·';
+    else if (kind === 'exit' && group.length > 1) mark.textContent = '出×' + group.length;
+    else mark.textContent = (kind === 'entry' ? '入' : kind === 'exit' ? '出' : '') + pair + (group.length > 1 ? '+' : '');
+    cell.append(mark);
   }
 }
 
@@ -232,10 +249,13 @@ function renderMap() {
   $('map-actions').hidden = !editing;
   $('dpad').hidden = !playing;
   $('record-tools').hidden = !recording;
+  $('portal-direction-label').hidden = !linking;
   $('portal-cancel').hidden = !linking || !pendingPortal;
   $('portal-help').hidden = !linking;
-  $('portal-help').textContent = portalMessage || (pendingPortal ? '已选第一端，再点墙或箱子的另一条边。' :
-    '点墙或箱子的两条边配对。点击已有端点可移除整对。');
+  const oneWay = oneWayPortal.value === 'one-way';
+  $('portal-help').textContent = portalMessage || (pendingPortal ?
+    (oneWay ? '已选入口。请点出口，可共用已有出口。' : '已选第一端，再点墙或箱子的另一条边。') :
+    (oneWay ? '先点入口，再点出口。点已有端点可管理连接。' : '点墙或箱子的两条边配对。点已有端点可管理连接。'));
   $('map-info').textContent = '无限地图 · ' + map.initial.boxes.length + ' 个箱子 · ' + map.goals.size + ' 个目标';
   $('finish-status').textContent = map.finish === null ? '玩家终点可选' : '已设置玩家终点';
   if (playing) {
@@ -485,28 +505,50 @@ function choosePortalFace(coordinate, side) {
     return;
   }
   const portals = level.portals ?? [];
-  const index = portals.findIndex(end => end.cell === coordinate && end.side === side);
-  if (index >= 0 && pendingPortal) {
-    portalMessage = '这条边已有传送门，请选择另一条边。';
-  } else if (index >= 0) {
-    const pair = Math.floor(index / 2);
-    openDialog('移除传送门 ' + (pair + 1), '<p>将移除这一对的两个端点。</p>', [
-      actionButton('移除整对', 'primary', () => {
-        changeMap(map.tiles, false, level.chainPush, portals.filter((_, i) => Math.floor(i / 2) !== pair));
-        dialog.close();
-      }),
-    ]);
+  const connections = portals.filter(end => end.cell === coordinate && end.side === side);
+  const hasEntrance = connections.some(end => !end.exitOnly);
+  const oneWay = oneWayPortal.value === 'one-way';
+  if (!pendingPortal && connections.length) {
+    managePortalFace(coordinate, side, portals, hasEntrance);
     return;
-  } else if (!pendingPortal) {
+  }
+  if (!pendingPortal) {
     pendingPortal = { cell: coordinate, side };
     portalMessage = '';
   } else if (pendingPortal.cell === coordinate && pendingPortal.side === side) {
     portalMessage = '两端须选在不同的边上。';
+  } else if (!oneWay && hasEntrance) {
+    portalMessage = '这条边已有去向，请选择另一条边。';
   } else {
-    changeMap(map.tiles, false, level.chainPush, [...portals, pendingPortal, { cell: coordinate, side }]);
-    portalMessage = '双向传送门 ' + (portals.length / 2 + 1) + ' 已建立。';
+    const exit = oneWay ? { cell: coordinate, side, exitOnly: true } : { cell: coordinate, side };
+    changeMap(map.tiles, false, level.chainPush, [...portals, pendingPortal, exit]);
+    portalMessage = (oneWay ? '单向' : '双向') + '传送门 ' + (portals.length / 2 + 1) + ' 已建立。';
   }
   renderMap();
+}
+
+function managePortalFace(coordinate, side, portals, hasEntrance) {
+  openDialog('管理传送连接', '<div class="level-list"></div>');
+  const list = $('dialog-body').firstElementChild;
+  if (!hasEntrance) {
+    list.append(actionButton('从这条边新建连接', '', () => {
+      pendingPortal = { cell: coordinate, side };
+      portalMessage = '';
+      dialog.close();
+      renderMap();
+    }));
+  }
+  for (let i = 0; i < portals.length; i += 2) {
+    const [from, to] = portals.slice(i, i + 2);
+    const atFace = end => end.cell === coordinate && end.side === side;
+    if (!atFace(from) && !atFace(to)) continue;
+    const number = i / 2 + 1;
+    const kind = to.exitOnly ? (atFace(from) ? '单向入口' : '单向出口') : '双向门';
+    list.append(actionButton('移除' + kind + ' ' + number, '', () => {
+      changeMap(map.tiles, false, level.chainPush, portals.filter((_, index) => index !== i && index !== i + 1));
+      dialog.close();
+    }));
+  }
 }
 
 function portalClick(event, coordinate) {
@@ -611,6 +653,11 @@ document.querySelectorAll('[data-brush]').forEach(button => {
   });
 });
 $('portal-cancel').addEventListener('click', () => {
+  pendingPortal = null;
+  portalMessage = '';
+  renderMap();
+});
+oneWayPortal.addEventListener('change', () => {
   pendingPortal = null;
   portalMessage = '';
   renderMap();
@@ -1028,7 +1075,8 @@ $('help').addEventListener('click', () => {
   openDialog('使用说明', '<p>地图从空白开始，按住鼠标右键拖动可向四周平移。选好工具后，用左键点击或拖动绘制。</p>' +
     '<p>放置玩家起点和箱子目标，箱子数可以多于目标数。选「玩家终点」放置一面旗，再点旗子可移除。有旗时，玩家也要走到旗子处才能通关。只放旗子也可以做走位关卡。</p>' +
     '<p>点「手动试玩」，用方向键、WASD 或屏幕方向按钮移动。键盘每按一次走一步，长按时只走第一步。按 Z 撤销上一步。勾选「允许连推多个箱子」后，一步可以推动相邻的一整排箱子。</p>' +
-    '<p>用「传送门」依次点选墙或箱子的两条边。同编号的两端双向相通。出口和另一个入口正对紧贴时，会继续通过下一对门。开启连推时，整排箱子先一起前进，最前面的箱子碰墙后才触发门箱传送。依次尝试后箱、前箱和玩家，没门或传不通就试下一项。前箱传走的同一步，门箱和它后面被推动的箱子会向前补一格。关闭连推时，门箱沿门面推到前箱就先传走前箱。没有可执行的推箱动作时，玩家可以从碰到的门面进入，即使门箱背后紧贴的是普通箱子。若最终出口有箱子并且推得动，玩家会在同一步穿门走到让出的格子。</p>' +
+    '<p>用「传送门」依次点选墙或箱子的两条边。双向门两端都能进入。选「单向」后，先点入口，再点出口。一个入口只有一个去向，标着「出」的端点可以接收多条连接。点已有端点可管理连接。</p>' +
+    '<p>出口和另一个入口正对紧贴时，会继续通过下一对门。开启连推时，整排箱子先一起前进，最前面的箱子碰墙后才触发门箱传送。依次尝试后箱、前箱和玩家，没门或传不通就试下一项。前箱传走的同一步，门箱和它后面被推动的箱子会向前补一格。关闭连推时，门箱沿门面推到前箱就先传走前箱。没有可执行的推箱动作时，玩家可以从碰到的门面进入，即使门箱背后紧贴的是普通箱子。若最终出口有箱子并且推得动，玩家会在同一步穿门走到让出的格子。</p>' +
     '<p>开始训练后，左侧地图会显示 AI 的每一步。可在「观战 AI」中调速度或暂停。进入手动试玩会暂停训练，回到训练区可继续。</p>' +
     '<p>点「示范几步」，从起点演示走位或推箱，再点「保存示范」。AI 每两回合会跟随示范一次，然后自行继续。胜率只统计独立尝试。</p>' +
     '<p>AI 用 Q-learning 反复练习。训练区包含已绘制的地图和外围三格空地，最多 40,000 格。找到通关路线后即可回放。</p>' +

@@ -40,9 +40,10 @@
   function indexPortals(portals, isWall, adjacent) {
     const fixed = new Map();
     const movable = [];
-    portals.forEach(({ cell, side }, index) => {
-      if (isWall(cell)) addPortalFace(fixed, cell, side, index);
-      else movable.push(index);
+    const exitOnly = portals.map(end => end.exitOnly === true);
+    portals.forEach(({ cell, side }, endpoint) => {
+      if (!isWall(cell)) movable.push(endpoint);
+      else if (!exitOnly[endpoint]) addPortalFace(fixed, cell, side, endpoint);
     });
     const fixedExits = portals.map(({ cell, side }) => {
       if (!isWall(cell)) return null;
@@ -50,15 +51,22 @@
       const wall = isWall(next);
       return { cell: next, wall, entrance: wall ? fixed.get(next)?.[opposite(side)] ?? -1 : -1 };
     });
-    return { fixed, fixedExits, movable, cache: new WeakMap() };
+    return { fixed, fixedExits, movable, exitOnly, cache: new WeakMap() };
   }
 
   function movingFaces(map, portalCells) {
-    const { movable, cache } = map.portalIndex;
+    const { movable, exitOnly, cache } = map.portalIndex;
     let index = cache.get(portalCells);
     if (!index) {
-      index = new Map();
-      for (const endpoint of movable) addPortalFace(index, portalCells[endpoint], map.portalSides[endpoint], endpoint);
+      const entries = new Map();
+      const endpoints = new Map();
+      for (const endpoint of movable) {
+        const cell = portalCells[endpoint];
+        if (!endpoints.has(cell)) endpoints.set(cell, []);
+        endpoints.get(cell).push(endpoint);
+        if (!exitOnly[endpoint]) addPortalFace(entries, cell, map.portalSides[endpoint], endpoint);
+      }
+      index = { entries, endpoints };
       cache.set(portalCells, index);
     }
     return index;
@@ -128,22 +136,31 @@
       tiles.set(cell, tile);
     }
     const pairs = data.portals ?? [];
-    if (!Array.isArray(pairs) || pairs.some(pair => !Array.isArray(pair) || pair.length !== 2)) {
-      throw new Error('传送门须成对设置。');
-    }
-    const used = new Set();
-    const portals = pairs.flatMap(pair => pair.map(endpoint => {
-      if (!Array.isArray(endpoint) || endpoint.length !== 3) throw new Error('请检查传送门端点。');
-      const [x, y, side] = endpoint;
-      const cell = key(x, y);
-      const face = cell + ',' + side;
-      if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y) || !Number.isInteger(side) ||
-          !directions[side] || !portalHost(tiles.get(cell)) || used.has(face)) {
-        throw new Error('传送门须绑定在箱子或墙的边上，每条边只能绑定一个端点。');
+    if (!Array.isArray(pairs)) throw new Error('传送门须成对设置。');
+    const entrances = new Set();
+    const portals = pairs.flatMap(pair => {
+      if (!Array.isArray(pair) || (pair.length !== 2 && !(pair.length === 3 && pair[2] === 'one-way'))) {
+        throw new Error('传送门须指定两个端点，单向门可加 one-way 标记。');
       }
-      used.add(face);
-      return { cell, side };
-    }));
+      const ends = pair.slice(0, 2).map((endpoint, index) => {
+        if (!Array.isArray(endpoint) || endpoint.length !== 3) throw new Error('请检查传送门端点。');
+        const [x, y, side] = endpoint;
+        const cell = key(x, y);
+        if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y) || !Number.isInteger(side) ||
+            !directions[side] || !portalHost(tiles.get(cell))) {
+          throw new Error('传送门须绑定在箱子或墙的边上。');
+        }
+        if (index === 1 && pair.length === 3) return { cell, side, exitOnly: true };
+        const face = cell + ',' + side;
+        if (entrances.has(face)) throw new Error('同一个入口只能通往一个出口。');
+        entrances.add(face);
+        return { cell, side };
+      });
+      if (ends[0].cell === ends[1].cell && ends[0].side === ends[1].side) {
+        throw new Error('同一条连接的入口和出口须选不同的边。');
+      }
+      return ends;
+    });
     let finish = null;
     if (data.finish != null) {
       const location = data.finish;
@@ -165,7 +182,9 @@
     const lines = [...tiles].map(([cell, tile]) => JSON.stringify([...point(cell), tile]));
     const pairs = [];
     for (let i = 0; i < portals.length; i += 2) {
-      pairs.push(JSON.stringify(portals.slice(i, i + 2).map(end => [...point(end.cell), end.side])));
+      const pair = portals.slice(i, i + 2).map(end => [...point(end.cell), end.side]);
+      if (portals[i + 1]?.exitOnly) pair.push('one-way');
+      pairs.push(JSON.stringify(pair));
     }
     const links = pairs.length ? '],\n  "portals": [\n    ' + pairs.join(',\n    ') + '\n  ]' : ']';
     const finishField = finish === null ? '' : ',\n  "finish": ' + JSON.stringify(point(finish));
@@ -292,7 +311,7 @@
         if (portalCells === state.portalCells) portalCells = portalCells.slice();
         portalCells[endpoint] = next;
       };
-      const index = movable.length > 4 ? movingFaces(map, portalCells) : null;
+      const index = movable.length > 4 ? movingFaces(map, portalCells).endpoints : null;
       for (let cell = player; cell !== landing;) {
         const next = single ? landing : map.adjacent(cell, direction);
         if (index) {
@@ -309,7 +328,7 @@
   function portalOn(map, portalCells, cell, side) {
     if (map.isWall(cell)) return map.portalIndex.fixed.get(cell)?.[side] ?? -1;
     if (!map.portalIndex.movable.length) return -1;
-    return movingFaces(map, portalCells).get(cell)?.[side] ?? -1;
+    return movingFaces(map, portalCells).entries.get(cell)?.[side] ?? -1;
   }
 
   function tracePortalExit(map, portalCells, entrance, occupied, visited, removed) {
@@ -549,7 +568,7 @@
       });
     });
     state.portalCells.forEach((cell, index) => {
-      if (!map.isWall(cell)) return;
+      if (map.portalIndex.exitOnly[index] || !map.isWall(cell)) return;
       const side = map.portalSides[index];
       addPortalPush(map.neighbor(cell, side), opposite(side));
     });
