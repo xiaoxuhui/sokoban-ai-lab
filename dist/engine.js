@@ -37,14 +37,20 @@
     faces[side] ??= endpoint;
   }
 
-  function indexPortals(portals, isWall) {
+  function indexPortals(portals, isWall, adjacent) {
     const fixed = new Map();
     const movable = [];
     portals.forEach(({ cell, side }, index) => {
       if (isWall(cell)) addPortalFace(fixed, cell, side, index);
       else movable.push(index);
     });
-    return { fixed, movable, cache: new WeakMap() };
+    const fixedExits = portals.map(({ cell, side }) => {
+      if (!isWall(cell)) return null;
+      const next = adjacent(cell, side);
+      const wall = isWall(next);
+      return { cell: next, wall, entrance: wall ? fixed.get(next)?.[opposite(side)] ?? -1 : -1 };
+    });
+    return { fixed, fixedExits, movable, cache: new WeakMap() };
   }
 
   function movingFaces(map, portalCells) {
@@ -77,12 +83,13 @@
     }));
     const isWall = cell => tiles[cell] === '#';
     const next = adjacent.map(neighbors => neighbors.map(cell => isWall(cell) ? -1 : cell));
+    const adjacentCell = (cell, direction) => adjacent[cell][direction];
     return {
       width, tiles, goals, finish, next, chainPush, isWall,
-      adjacent: (cell, direction) => adjacent[cell][direction],
+      adjacent: adjacentCell,
       neighbor: (cell, direction) => next[cell][direction],
       portalSides: portals.map(end => end.side),
-      portalIndex: indexPortals(portals, isWall),
+      portalIndex: indexPortals(portals, isWall, adjacentCell),
       initial: { player, boxes, moves: 0, pushes: 0, portalCells: portals.map(end => end.cell) },
     };
   }
@@ -183,7 +190,7 @@
     const isWall = cell => tiles.get(cell) === '#';
     return {
       tiles, goals, finish, chainPush, isWall, adjacent, portalSides: portals.map(end => end.side),
-      portalIndex: indexPortals(portals, isWall),
+      portalIndex: indexPortals(portals, isWall, adjacent),
       initial: { player, boxes, moves: 0, pushes: 0, portalCells: portals.map(end => end.cell) },
       neighbor(cell, direction) {
         const next = adjacent(cell, direction);
@@ -303,18 +310,23 @@
     return movingFaces(map, portalCells).get(cell)?.[side] ?? -1;
   }
 
-  function tracePortalExit(map, portalCells, entrance, occupied) {
+  function tracePortalExit(map, portalCells, entrance, occupied, visited, removed) {
     const pairs = new Set();
     while (entrance >= 0) {
       const pair = entrance >> 1;
-      if (pairs.has(pair)) return null;
+      if (pairs.has(pair) || visited?.has(pair)) return null;
       pairs.add(pair);
       const exit = entrance ^ 1;
       const direction = map.portalSides[exit];
-      const cell = map.adjacent(portalCells[exit], direction);
+      const fixed = map.portalIndex.fixedExits[exit];
+      const cell = fixed ? fixed.cell : map.adjacent(portalCells[exit], direction);
       if (cell === -1) return null;
-      const wall = map.isWall(cell);
-      if (wall || occupied.has(cell)) {
+      const wall = fixed ? fixed.wall : map.isWall(cell);
+      if (fixed && wall) {
+        entrance = fixed.entrance;
+        continue;
+      }
+      if (wall || (cell !== removed && occupied.has(cell))) {
         entrance = portalOn(map, portalCells, cell, opposite(direction));
         if (entrance >= 0) continue;
       }
@@ -416,25 +428,40 @@
     while (pending.length) {
       const { plan, visited } = pending.pop();
       const { moved, entrance, cargo } = plan;
-      const boxes = state.boxes.filter(box => box !== cargo).map(box => moved.get(box) ?? box);
-      const portalCells = state.portalCells.map(cell => moved.get(cell) ?? cell);
+      const boxes = [];
+      for (const box of state.boxes) if (box !== cargo) boxes.push(moved.get(box) ?? box);
+      let portalCells = state.portalCells;
+      let indexedCells = portalCells;
+      const moveEndpoint = (endpoint, cell) => {
+        if (portalCells === indexedCells) portalCells = portalCells.slice();
+        portalCells[endpoint] = cell;
+      };
+      if (moved.size) {
+        for (const endpoint of map.portalIndex.movable) {
+          const cell = moved.get(state.portalCells[endpoint]);
+          if (cell !== undefined) moveEndpoint(endpoint, cell);
+        }
+      }
       if (cargo !== undefined) {
         if (state.portalCells[entrance ^ 1] === cargo) continue;
-        const projected = new Set(boxes);
-        const exit = tracePortalExit(map, portalCells, entrance, projected);
-        if (!exit || exit.cell === cargo || exit.cell === state.player ||
-            [...exit.pairs].some(pair => visited.has(pair))) continue;
+        const projected = moved.size ? new Set(boxes) : occupied;
+        const exit = tracePortalExit(map, portalCells, entrance, projected, visited, moved.size ? undefined : cargo);
+        if (!exit || exit.cell === cargo || exit.cell === state.player) continue;
         const landing = exit.cell;
-        if (boxes.includes(landing)) {
+        if (projected.has(landing)) {
           // Relay the push first. Local boxes stay put for this input.
-          const relay = tracePortalExit(map, state.portalCells, entrance, occupied);
-          if (relay && occupied.has(relay.cell) && ![...relay.pairs].some(pair => visited.has(pair))) {
+          const relay = moved.size ? tracePortalExit(map, state.portalCells, entrance, occupied, visited) : exit;
+          if (relay && occupied.has(relay.cell)) {
             tryFrom(relay.cell, relay.direction, new Set([...visited, ...relay.pairs]));
           }
           continue;
         }
         boxes.push(landing);
-        state.portalCells.forEach((cell, i) => { if (cell === cargo) portalCells[i] = landing; });
+        // The projected locations may already be indexed by the exit search.
+        indexedCells = portalCells;
+        for (const endpoint of map.portalIndex.movable) {
+          if (state.portalCells[endpoint] === cargo) moveEndpoint(endpoint, landing);
+        }
       }
       if (boxes.includes(state.player)) continue;
       // If the player entered a portal, follow the push into the vacated exit cell.

@@ -636,24 +636,27 @@ document.addEventListener('keydown', event => {
     event.preventDefault();
     return;
   }
-  const direction = movementKeys[event.key.toLowerCase()];
-  if (typeof direction !== 'number') return;
+  const pressed = event.key.toLowerCase();
+  const direction = movementKeys[pressed];
+  if (pressed !== 'z' && typeof direction !== 'number') return;
   event.preventDefault();
   const key = keyIdentity(event);
   if (event.repeat || heldDirections.has(key)) return;
   heldDirections.add(key);
-  move(direction);
+  if (pressed === 'z') undoMove();
+  else move(direction);
 });
 document.addEventListener('keyup', event => heldDirections.delete(keyIdentity(event)));
 window.addEventListener('blur', () => heldDirections.clear());
-$('undo').addEventListener('click', () => {
-  if (!undo.length) return;
+function undoMove() {
+  if (mode !== 'play' || !undo.length) return;
   const previous = manual;
   manual = undo.pop();
   manualPath.pop();
   followPlayer(manual);
   renderManual(previous);
-});
+}
+$('undo').addEventListener('click', undoMove);
 function resetPlay() {
   manual = map.initial;
   undo = [];
