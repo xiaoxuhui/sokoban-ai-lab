@@ -30,6 +30,10 @@ button:not(:disabled) { transition: background .16s, color .16s, border-color .1
 .outline:not(:disabled):hover, .plain:not(:disabled):hover { background: #28352c; color: var(--text); }
 .docs { padding: 8px 11px; color: var(--muted); font-size: 12px; }
 .docs span { margin-right: 3px; }
+.top-links { display: flex; align-items: center; gap: 6px; }
+.top-link { white-space: nowrap; text-decoration: none; }
+.top-link:hover { background: #28352c; color: var(--text); }
+.top-link:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
 main { max-width: 1184px; padding: 0 28px; margin: 0 auto; }
 .hero { padding: 40px 0 28px; }
 .eyebrow { color: var(--green); display: flex; align-items: center; gap: 8px; font: 700 11px/1.2 ui-monospace, Consolas, monospace; letter-spacing: .16em; }

@@ -1,0 +1,21 @@
+.intro-main { max-width: 720px; padding-bottom: 22px; }
+.intro-heading { display: flex; justify-content: space-between; align-items: end; flex-wrap: wrap; gap: 12px; padding: 32px 0 14px; }
+.intro-heading h1 { margin: 0; font-size: clamp(29px, 6vw, 44px); line-height: 1.05; }
+.intro-levels button { white-space: nowrap; }
+.intro-levels button[data-complete="true"]::after { content: " ✓"; color: var(--green); }
+.intro-panel-heading { align-items: start; min-height: 49px; margin-bottom: 12px; }
+.intro-hint, .intro-count, .intro-result p { margin: 0; }
+#intro-hint { line-height: 1.5; }
+.intro-count { margin-top: 4px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.intro-stage { display: grid; place-items: center; min-height: clamp(255px, 44vh, 424px); padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--well); }
+.intro-board { display: grid; grid-template-columns: repeat(var(--columns), minmax(0, 1fr)); width: 100%; max-width: 440px; user-select: none; }
+.intro-board .cell { aspect-ratio: 1; }
+.intro-controls, .intro-result { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.intro-controls .outline { padding: 8px; font-size: 12px; white-space: nowrap; }
+.intro-result { min-height: 36px; }
+.intro-keyboard { margin-top: 12px; }
+@media (max-width: 420px) {
+  .intro-heading { padding-top: 21px; }
+  .intro-stage { padding: 9px; }
+  .intro-controls .dpad button { min-width: 31px; }
+}
