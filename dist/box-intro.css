@@ -1,16 +1,19 @@
 .intro-main { max-width: 720px; padding-bottom: 22px; }
 .intro-heading { display: flex; justify-content: space-between; align-items: end; flex-wrap: wrap; gap: 12px; padding: 32px 0 14px; }
 .intro-heading h1 { margin: 0; font-size: clamp(29px, 6vw, 44px); line-height: 1.05; }
+.intro-chapter { color: var(--muted); font-size: 13px; }
+.intro-levels { flex-wrap: wrap; margin-bottom: 12px; }
 .intro-levels button { white-space: nowrap; }
+.intro-levels button[data-challenge="true"] { box-shadow: inset 0 -2px #fa9977; }
 .intro-levels button[data-complete="true"]::after { content: " ✓"; color: var(--green); }
 .intro-panel-heading { align-items: start; min-height: 49px; margin-bottom: 12px; }
 .intro-hint, .intro-count, .intro-result p { margin: 0; }
 #intro-hint { line-height: 1.5; }
 .intro-count { margin-top: 4px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .intro-stage { display: grid; place-items: center; min-height: clamp(255px, 44vh, 424px); padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--well); }
-.intro-board { display: grid; grid-template-columns: repeat(var(--columns), minmax(0, 1fr)); width: 100%; max-width: 440px; user-select: none; overflow: hidden; border-radius: 8px; }
+.intro-board { display: grid; grid-template-columns: repeat(var(--columns), minmax(0, 1fr)); width: 100%; max-width: calc(440px * var(--columns) / var(--longest-side)); user-select: none; overflow: hidden; border-radius: 8px; }
 .intro-board .cell { aspect-ratio: 1; border: 0; background: #535257; }
-.intro-board .cell.wall { border-radius: 0; background: #cbcbce; box-shadow: none; }
+.intro-board .cell.wall { border-radius: 0; background: var(--room-color, #cbcbce); box-shadow: none; }
 .intro-board .cell > .goal, .intro-board .cell > .intro-player-goal { width: 76%; height: 76%; border: 3px solid #dedbdf; border-radius: 2px; background: transparent; }
 .intro-board .goal::after { content: none; }
 .intro-board .cell:has(> .player, > .intro-player-goal)::before,
@@ -23,9 +26,16 @@
 .intro-board .cell > .crate, .intro-board .cell > .player { width: 87%; height: 87%; }
 .intro-board .crate { background: #ffb63a; border-color: #ffcf74; box-shadow: inset 0 -3px #bd791a, 0 2px 4px #211510a6; }
 .intro-board .crate.placed { background: #ffcf73; border-color: #ffe2a2; }
+.enter-chapter .crate { background: #38bce8; border-color: #94ddf8; box-shadow: inset 0 -3px #237fa4, 0 2px 4px #211510a6; }
+.enter-chapter .crate.placed { background: #71daff; border-color: #dbf7ff; }
 .intro-board .crate::before, .intro-board .crate::after { content: none; }
 .intro-board .player { background: #cf197a; border-color: #ff79bd; border-radius: 4px; box-shadow: inset 0 -3px #941555, 0 2px 4px #211020a6; }
 .intro-board .player::before, .intro-board .player::after { content: none; }
+.intro-board .room-box { position: absolute; width: 87%; height: 87%; padding: 2px; border-radius: 4px; background: var(--box-color); border: 1px solid #d2e1fa; display: grid; place-items: center; }
+.intro-board .room-box canvas { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.intro-board .room-box.room-on-goal { outline: 2px solid #f5dfa7; outline-offset: 1px; }
+.intro-board .cell:has(> .room-box) { z-index: 1; }
+#intro-inspector { width: min(400px, calc(100% - 24px)); }
 .intro-controls, .intro-result { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
 .intro-controls .outline { padding: 8px; font-size: 12px; white-space: nowrap; }
 .intro-result { min-height: 36px; }
