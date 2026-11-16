@@ -7,12 +7,15 @@ const grid = $('grid');
 const dialog = $('dialog');
 const storageKey = 'sokoban-lab-levels-v1';
 const followAiKey = 'sokoban-lab-follow-ai-v1';
+const followClickKey = 'sokoban-lab-follow-click-v1';
 const portalArrowsKey = 'sokoban-lab-portal-arrows-v1';
 const aiFollow = $('ai-follow');
+const clickFollow = $('click-follow');
 const portalArrowToggle = $('show-portal-arrows');
 const portalCanvas = $('portal-arrows');
 try {
   aiFollow.checked = localStorage.getItem(followAiKey) !== 'off';
+  clickFollow.checked = localStorage.getItem(followClickKey) === 'on';
   portalArrowToggle.checked = localStorage.getItem(portalArrowsKey) !== 'off';
 } catch { /* These controls also work without storage. */ }
 const recordBudget = 'next-record';
@@ -114,6 +117,10 @@ function followPosition(state) {
 
 function followAi(state) {
   if (aiFollow.checked && !gesture?.pan) followPosition(state);
+}
+
+function followManual(state) {
+  if (!state.devices || (clickFollow.checked && !gesture?.pan)) followPosition(state);
 }
 
 function layoutBoard() {
@@ -391,6 +398,7 @@ function renderMap() {
   $('watch-tools').hidden = !watching;
   $('replay-tools').hidden = mode !== 'replay';
   $('ai-follow-option').hidden = !watching && mode !== 'replay';
+  $('click-follow-option').hidden = !playing || !devices;
   $('map-actions').hidden = !editing;
   $('dpad').hidden = !playing || state.player === -1;
   $('record-tools').hidden = !recording;
@@ -486,7 +494,7 @@ function setMode(next) {
   mode = next;
   if (mode === 'play') {
     pauseTraining();
-    followPosition(manual);
+    followManual(manual);
   }
   if (mode === 'watch') {
     nextWatchAt = 0;
@@ -868,7 +876,7 @@ new ResizeObserver(() => {
 }).observe(board);
 $('center-map').addEventListener('click', () => {
   centerMap();
-  if (mode === 'play') followPosition(activeState());
+  if (mode === 'play') followManual(activeState());
   else if (mode === 'watch' || mode === 'replay') followAi(activeState());
   renderBoard(activeState());
 });
@@ -879,6 +887,11 @@ aiFollow.addEventListener('change', () => {
   const state = activeState();
   followAi(state);
   renderBoard(state);
+});
+clickFollow.addEventListener('change', () => {
+  try {
+    localStorage.setItem(followClickKey, clickFollow.checked ? 'on' : 'off');
+  } catch { /* Clicking still works without storage. */ }
 });
 portalArrowToggle.addEventListener('change', () => {
   try {
@@ -919,7 +932,7 @@ function commitManualAction(next, input) {
   undo.push(previous);
   manualPath.push(input);
   manual = next;
-  followPosition(manual);
+  followManual(manual);
   renderManual(previous);
 }
 
@@ -955,7 +968,7 @@ function undoMove() {
   const previous = manual;
   manual = undo.pop();
   manualPath.pop();
-  followPosition(manual);
+  followManual(manual);
   renderManual(previous);
 }
 $('undo').addEventListener('click', undoMove);
@@ -963,7 +976,7 @@ function resetPlay() {
   manual = map.initial;
   undo = [];
   manualPath = [];
-  followPosition(manual);
+  followManual(manual);
   renderMap();
 }
 
