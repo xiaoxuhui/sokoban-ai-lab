@@ -44,7 +44,7 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let levelButtons = [];
 let chapterIndex = -1;
 const storageKey = 'sokoban-lab-box-intro-v1';
-const layoutRevision = 2;
+const layoutRevision = 3;
 const moveKeys = { arrowup: 0, w: 0, arrowright: 1, d: 1, arrowdown: 2, s: 2, arrowleft: 3, a: 3 };
 let active = 0;
 let complete = [];
@@ -57,7 +57,19 @@ let textView = false;
 try {
   const saved = JSON.parse(localStorage.getItem(storageKey));
   if (Number.isInteger(saved?.active) && levels[saved.active]) active = saved.active;
-  if (saved?.revision === layoutRevision && Array.isArray(saved.complete)) complete = saved.complete.slice(0, levels.length);
+  if ((saved?.revision === 2 || saved?.revision === layoutRevision) && Array.isArray(saved.complete)) {
+    complete = saved.complete.slice(0, levels.length);
+  }
+  if (saved?.revision === 2) {
+    const reference = chapters.find(chapter => chapter.id === 'reference');
+    const seventh = reference.start + 6;
+    const tenth = reference.start + 9;
+    if (active === seventh) active = tenth;
+    else if (active === tenth) active = seventh;
+    if (complete.length > seventh) {
+      [complete[seventh], complete[tenth]] = [complete[tenth], complete[seventh]];
+    }
+  }
 } catch { /* Progress is optional when storage is unavailable. */ }
 
 const query = new URLSearchParams(location.search);
