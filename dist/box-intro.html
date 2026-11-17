@@ -7,10 +7,10 @@
   <meta name="theme-color" content="#111715">
   <title>套箱模式 · 入门</title>
   <link rel="stylesheet" href="style.css?v=47">
-  <link rel="stylesheet" href="box-intro.css?v=9">
+  <link rel="stylesheet" href="box-intro.css?v=10">
   <script src="box-rooms.js?v=4" defer></script>
-  <script src="box-levels.js?v=5" defer></script>
-  <script src="box-intro.js?v=8" defer></script>
+  <script src="box-levels.js?v=6" defer></script>
+  <script src="box-intro.js?v=9" defer></script>
 </head>
 <body>
   <header class="top">
@@ -33,6 +33,7 @@
           <div class="intro-room-info">
             <p id="intro-room" class="secondary" hidden></p>
             <button class="outline docs" id="intro-view-parent" type="button" hidden>查看外层</button>
+            <button class="outline docs" id="intro-display-mode" type="button" hidden>图形显示</button>
           </div>
         </div>
         <p class="move-count intro-count" id="intro-count"></p>
@@ -40,6 +41,7 @@
       <div class="intro-stage intro-scene" id="intro-stage">
         <canvas class="intro-surround" aria-hidden="true" hidden></canvas>
         <div id="intro-board" class="intro-board" role="group" aria-label="棋盘"></div>
+        <div id="intro-text-maps" class="intro-text-maps" role="group" aria-label="字符棋盘" hidden></div>
       </div>
       <div class="intro-controls">
         <div class="tools-group">

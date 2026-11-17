@@ -24,6 +24,17 @@
 .intro-scene > .intro-board { position: relative; z-index: 1; width: calc(var(--scene-side) * var(--columns) / var(--longest-side)); }
 .intro-scene > .intro-ghost { position: absolute; max-width: none; pointer-events: none; z-index: 2; }
 .intro-surround { position: absolute; pointer-events: none; opacity: .65; width: calc(var(--scene-side) * var(--outer-columns)); height: calc(var(--scene-side) * var(--outer-rows)); left: 50%; top: 50%; transform: translate(calc(-1 * var(--scene-side) * var(--outer-x)), calc(-1 * var(--scene-side) * var(--outer-y))); }
+.intro-stage.text-view { background: #17151c; }
+.intro-stage.text-view .intro-surround { visibility: hidden; }
+.intro-text-maps { --text-cell: clamp(11px, 4.75cqw, 27px); display: flex; align-items: flex-start; gap: calc(var(--text-cell) * .45); }
+.intro-text-room { display: grid; grid-template-columns: auto auto; align-items: center; column-gap: .55em; padding: 0; min-width: 0; border: 0; background: transparent; color: var(--text-room-color); font: 600 var(--text-cell)/1.55 "Courier New", monospace; text-align: left; }
+.intro-text-room:hover { background: transparent; }
+.intro-text-lines { white-space: pre; }
+.intro-text-lines span { display: inline-block; width: var(--text-cell); }
+.intro-text-room [data-glyph="p"] { color: #ef8edb; }
+.intro-text-room [data-glyph="b"] { color: #ffdc72; }
+.intro-text-room [data-glyph="2"] { color: #8eafff; }
+.intro-text-room :is([data-glyph="_"], [data-glyph="="]) { color: #f7f0e5; }
 .intro-board .cell { aspect-ratio: 1; border: 0; background: var(--room-floor, #535257); }
 .intro-board .cell.wall { border-radius: 0; background: var(--room-color, #cbcbce); box-shadow: none; }
 .intro-board .cell > .goal, .intro-board .cell > .intro-player-goal { width: 76%; height: 76%; border: 3px solid #dedbdf; border-radius: 2px; background: transparent; }

@@ -19,10 +19,10 @@ const opening = [
   },
 ];
 const chapters = [
-  { title: '入门', levels: [...opening, ...BoxCampaign.intro], color: '#cbcbce' },
-  { title: '进入', levels: BoxCampaign.enter, color: '#a4bedf' },
-  { title: '空白', levels: BoxCampaign.empty, color: '#b7a8a6', theme: 'empty' },
-  { title: '吞食', levels: BoxCampaign.eat, color: '#ffa778', theme: 'eat' },
+  { id: 'intro', title: '入门', levels: [...opening, ...BoxCampaign.intro], color: '#cbcbce' },
+  { id: 'enter', title: '进入', levels: BoxCampaign.enter, color: '#a4bedf' },
+  { id: 'empty', title: '空白', levels: BoxCampaign.empty, color: '#b7a8a6' },
+  { id: 'eat', title: '吞食', levels: BoxCampaign.eat, color: '#ffa778' },
 ];
 const levels = [];
 for (const chapter of chapters) {
@@ -33,6 +33,8 @@ for (const chapter of chapters) {
 const $ = id => document.getElementById(id);
 const board = $('intro-board');
 const stage = $('intro-stage');
+const textMaps = $('intro-text-maps');
+const displayMode = $('intro-display-mode');
 const inspector = $('intro-inspector');
 const previewBoard = $('intro-preview-board');
 const previewStage = $('intro-preview-stage');
@@ -49,12 +51,20 @@ let map;
 let state;
 let history = [];
 let future = [];
+let textView = false;
 
 try {
   const saved = JSON.parse(localStorage.getItem(storageKey));
   if (Number.isInteger(saved?.active) && levels[saved.active]) active = saved.active;
   if (saved?.revision === layoutRevision && Array.isArray(saved.complete)) complete = saved.complete.slice(0, levels.length);
 } catch { /* Progress is optional when storage is unavailable. */ }
+
+const query = new URLSearchParams(location.search);
+const requestedChapter = chapters.find(chapter => chapter.id === query.get('chapter'));
+const requestedLevel = Number(query.get('level'));
+if (Number.isInteger(requestedLevel) && requestedChapter?.levels[requestedLevel - 1]) {
+  active = requestedChapter.start + requestedLevel - 1;
+}
 
 function saveProgress() {
   try {
@@ -108,7 +118,8 @@ function render(crossings = []) {
     const entering = parentRoom(roomId) === previousRoom;
     crossing = { direction: entering ? 'in' : 'out', owner: map.rooms[entering ? roomId : previousRoom].owner };
   }
-  renderScene(board, roomId, crossing);
+  renderScene(board, roomId, textView ? null : crossing);
+  if (textView) renderTextMaps(roomId);
   $('intro-room').hidden = map.rooms.length === 1 && map.rooms[0].owner < 0;
   $('intro-room').textContent = roomLabel(roomId);
   const canLookOut = parentRoom(roomId) >= 0;
@@ -140,6 +151,64 @@ function addPiece(cell, name) {
 
 function roomColor(roomId) {
   return map.rooms[roomId].color ?? (roomId === 0 ? chapters[chapterIndex].color : '#79aedc');
+}
+
+function setTextView(enabled) {
+  clearRoomMotion(board);
+  textView = enabled;
+  board.hidden = enabled;
+  textMaps.hidden = !enabled;
+  stage.classList.toggle('text-view', enabled);
+  displayMode.textContent = enabled ? '图形显示' : '字符显示';
+}
+
+function renderTextMaps(playerRoom) {
+  if (!textMaps.children.length) {
+    for (const [roomId, room] of map.rooms.entries()) {
+      const button = document.createElement('button');
+      const label = document.createElement('span');
+      const lines = document.createElement('span');
+      button.type = 'button';
+      button.className = 'intro-text-room';
+      button.style.setProperty('--text-room-color', roomColor(roomId));
+      lines.className = 'intro-text-lines';
+      label.textContent = roomId + 1;
+      label.setAttribute('aria-hidden', 'true');
+      lines.setAttribute('aria-hidden', 'true');
+      for (let index = 0; index < room.tiles.length; index++) {
+        if (index > 0 && index % room.width === 0) lines.append('\n');
+        lines.append(document.createElement('span'));
+      }
+      button.append(label, lines);
+      button.addEventListener('click', () => {
+        const current = state.positions[0][0];
+        if (current === roomId) return;
+        const entering = parentRoom(roomId) === current;
+        inspectRoom(roomId, { direction: entering ? 'in' : 'out', owner: map.rooms[entering ? roomId : current].owner });
+      });
+      textMaps.append(button);
+    }
+  }
+  const glyphs = map.rooms.map(room => Array.from(room.tiles, tile => tile === '#' ? '#' : '.'));
+  for (const [room, x, y] of map.goals) glyphs[room][y * map.rooms[room].width + x] = '_';
+  const [finishRoom, finishX, finishY] = map.finish;
+  glyphs[finishRoom][finishY * map.rooms[finishRoom].width + finishX] = '=';
+  state.positions.forEach(([room, x, y], entity) => {
+    const child = map.inside[entity];
+    glyphs[room][y * map.rooms[room].width + x] = entity === 0 ? 'p' : child >= 0 ? String(child + 1) : 'b';
+  });
+  for (const [roomId, button] of Array.from(textMaps.children).entries()) {
+    const cells = button.querySelector('.intro-text-lines').children;
+    glyphs[roomId].forEach((glyph, index) => {
+      const cell = cells[index];
+      if (cell.dataset.glyph !== glyph) {
+        cell.textContent = glyph;
+        cell.dataset.glyph = glyph;
+      }
+    });
+    button.setAttribute('aria-label', (roomId === 0 ? '外层棋盘' : '套箱 ' + (roomId + 1)) +
+      (roomId === playerRoom ? '，玩家所在位置' : '，点击查看'));
+  }
 }
 
 function floorColor(roomId) {
@@ -317,7 +386,7 @@ function openLevel(index) {
     });
     $('intro-levels').replaceChildren(...levelButtons);
   }
-  const theme = chapters[nextChapter].theme;
+  const theme = chapters[nextChapter].id;
   map = compile({ ...level, eat: theme === 'eat' });
   state = map.initial;
   history = [];
@@ -332,6 +401,9 @@ function openLevel(index) {
   }
   board.replaceChildren();
   previewBoard.replaceChildren();
+  textMaps.replaceChildren();
+  displayMode.hidden = !level.textView;
+  setTextView(Boolean(level.textView));
   saveProgress();
   render();
 }
@@ -377,9 +449,13 @@ inspector.addEventListener('close', () => {
   if (!inspector.open) clearRoomMotion(previewBoard);
 });
 $('intro-view-parent').addEventListener('click', inspectParent);
+displayMode.addEventListener('click', () => {
+  setTextView(!textView);
+  render();
+});
 previewParent.addEventListener('click', inspectParent);
 stage.addEventListener('click', event => {
-  if (event.target === stage) inspectParent();
+  if (event.target === stage || event.target === textMaps) inspectParent();
 });
 inspector.addEventListener('click', event => {
   if (event.target === inspector || event.target === previewStage) inspectParent();
