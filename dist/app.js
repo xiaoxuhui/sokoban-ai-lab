@@ -518,7 +518,10 @@ function saveLevels() {
         name: entry.name, code: levelCode(entry), demonstration: entry.demonstration,
       })),
     }));
-  } catch { /* Storage is optional. */ }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function levelCode(entry) {
@@ -564,7 +567,7 @@ function selectLevel(index) {
   if (!library.entries[index] || index === library.index) return;
   stopActivity();
   if (trainer || trainingProblem) sessions.set(level, { trainer, trainingProblem, attempt, batch });
-  activateLevel(index);
+  return activateLevel(index);
 }
 
 function activateLevel(index) {
@@ -576,9 +579,10 @@ function activateLevel(index) {
   attempt = session?.attempt ?? null;
   batch = session?.batch ?? null;
   if (!batchComplete()) $('budget').value = batch.option;
-  saveLevels();
+  const saved = saveLevels();
   renderLevelPicker();
   loadBoard(true);
+  return saved;
 }
 
 function blankLevel(name) {
@@ -596,7 +600,25 @@ function deleteLevel() {
 function addLevels(entries) {
   const first = library.entries.length;
   library.entries.push(...entries);
-  selectLevel(first);
+  return selectLevel(first);
+}
+
+function importPortalMap() {
+  const url = new URL(location.href);
+  if (url.searchParams.get('import') !== 'box-portals') return;
+  const handoffKey = 'sokoban-lab-portal-import-v1';
+  try {
+    const entry = JSON.parse(sessionStorage.getItem(handoffKey));
+    if (typeof entry?.code !== 'string' || !entry.name?.trim()) throw Error('没有找到待导入的套箱地图。');
+    const saved = addLevels([{ name: entry.name.trim().slice(0, 40), ...readLevel(entry.code) }]);
+    sessionStorage.removeItem(handoffKey);
+    setMapNote(saved ? '已将套箱地图保存为新关卡，可以编辑传送门或试玩。' :
+      '已打开转换后的地图。浏览器保存失败，可以用「导入 / 导出」下载地图。', saved ? 'success' : 'error');
+  } catch (error) {
+    setMapNote(error.message, 'error');
+  }
+  url.searchParams.delete('import');
+  history.replaceState(history.state, '', url);
 }
 
 function editMap(changes, recenter = false) {
@@ -1516,4 +1538,5 @@ $('chain-push').checked = level.chainPush;
 centerMap();
 renderMap();
 renderTraining();
+importPortalMap();
 

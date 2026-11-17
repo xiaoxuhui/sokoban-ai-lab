@@ -440,6 +440,25 @@ function redo() {
   render(state.crossings);
 }
 
+$('intro-convert').addEventListener('click', () => {
+  const chapter = chapters[chapterIndex];
+  const name = chapter.title + ' 第 ' + (active - chapter.start + 1) + ' 关 · 传送门';
+  const code = JSON.stringify(BoxPortals.convert(map, state));
+  try {
+    sessionStorage.setItem('sokoban-lab-portal-import-v1', JSON.stringify({ name, code }));
+  } catch {
+    const url = URL.createObjectURL(new Blob([code + '\n'], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name + '.json';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    $('intro-status').textContent = '已下载地图，可在推箱子实验室里导入。';
+    return;
+  }
+  location.assign('./?import=box-portals');
+});
+
 $('intro-chapter').addEventListener('change', event => {
   openLevel(chapters[Number(event.target.value)].start);
   event.target.blur();
