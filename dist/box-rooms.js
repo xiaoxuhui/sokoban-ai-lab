@@ -43,7 +43,10 @@
       }
     }
     if (!positions[0] || !finish || rooms.slice(1).some(room => room.owner < 0)) throw Error('请检查房间和玩家终点。');
-    return { rooms, inside, goals, finish, eat: Boolean(level.eat), initial: { positions, moves: 0, pushes: 0 } };
+    return {
+      rooms, inside, goals, finish, eat: Boolean(level.eat), allowCycles: Boolean(level.allowCycles),
+      initial: { positions, moves: 0, pushes: 0 },
+    };
   }
 
   const matches = (position, room, x, y) => position[0] === room && position[1] === x && position[2] === y;
@@ -123,7 +126,7 @@
 
     function land(entity, roomId, x, y, offset, heading, entered) {
       const room = map.rooms[roomId];
-      if (room.tiles[y * room.width + x] === '#' || insideOwnBox(entity, roomId)) return false;
+      if (room.tiles[y * room.width + x] === '#' || (!map.allowCycles && insideOwnBox(entity, roomId))) return false;
       const occupant = positions.findIndex(position => matches(position, roomId, x, y));
       if (occupant >= 0 && !moveEntity(occupant, 0.5, heading)) {
         if (enter(entity, occupant, offset, heading, entered)) return true;

@@ -23,6 +23,7 @@ const chapters = [
   { id: 'enter', title: '进入', levels: BoxCampaign.enter, color: '#a4bedf' },
   { id: 'empty', title: '空白', levels: BoxCampaign.empty, color: '#b7a8a6' },
   { id: 'eat', title: '吞食', levels: BoxCampaign.eat, color: '#ffa778' },
+  { id: 'reference', title: '参照', levels: BoxCampaign.reference, color: '#2d9eca' },
 ];
 const levels = [];
 for (const chapter of chapters) {
@@ -79,9 +80,15 @@ function parentRoom(roomId) {
 }
 
 function roomLabel(roomId) {
-  if (roomId === 0 && map.rooms[0].owner >= 0) return '自引用棋盘';
+  const owner = map.rooms[roomId].owner;
+  if (owner >= 0 && state.positions[owner][0] === roomId) return '自引用棋盘';
+  const seen = new Set([roomId]);
   let depth = 0;
-  for (let room = parentRoom(roomId); room >= 0; room = parentRoom(room)) depth++;
+  for (let room = parentRoom(roomId); room >= 0; room = parentRoom(room)) {
+    if (seen.has(room)) return '参照循环';
+    seen.add(room);
+    depth++;
+  }
   return depth ? '箱内第 ' + depth + ' 层' : '外层';
 }
 
@@ -231,7 +238,8 @@ function drawRoomMap(canvas, roomId, size = 10) {
     if (id === roomId) context.strokeRect(x * size + 2, y * size + 2, size - 4, size - 4);
   }
   const emptyChapter = board.classList.contains('empty-chapter');
-  const playerColor = map.eat ? '#d260bd' : emptyChapter ? '#db562f' : '#df328d';
+  const playerColor = board.classList.contains('reference-chapter') ? '#c53d3a' :
+    map.eat ? '#d260bd' : emptyChapter ? '#db562f' : '#df328d';
   const crateColor = map.eat ? '#ffdc72' : emptyChapter ? '#add444' : board.classList.contains('blue-crates') ? '#38bce8' : '#ffb63a';
   for (const [index, [id, x, y]] of state.positions.entries()) {
     if (id !== roomId) continue;
@@ -387,7 +395,7 @@ function openLevel(index) {
     $('intro-levels').replaceChildren(...levelButtons);
   }
   const theme = chapters[nextChapter].id;
-  map = compile({ ...level, eat: theme === 'eat' });
+  map = compile({ ...level, eat: theme === 'eat' || theme === 'reference', allowCycles: theme === 'reference' });
   state = map.initial;
   history = [];
   future = [];
@@ -398,6 +406,7 @@ function openLevel(index) {
     container.classList.toggle('blue-crates', blueCrates);
     container.classList.toggle('empty-chapter', theme === 'empty');
     container.classList.toggle('eat-chapter', theme === 'eat');
+    container.classList.toggle('reference-chapter', theme === 'reference');
   }
   board.replaceChildren();
   previewBoard.replaceChildren();
