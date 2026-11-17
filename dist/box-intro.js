@@ -36,10 +36,10 @@ const board = $('intro-board');
 const stage = $('intro-stage');
 const textMaps = $('intro-text-maps');
 const displayMode = $('intro-display-mode');
-const inspector = $('intro-inspector');
-const previewBoard = $('intro-preview-board');
-const previewStage = $('intro-preview-stage');
-const previewParent = $('intro-preview-parent');
+const returnButton = $('intro-return');
+const parentButton = $('intro-view-parent');
+const moveButtons = document.querySelectorAll('[data-move]');
+const roomMaps = new WeakMap();
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let levelButtons = [];
 let chapterIndex = -1;
@@ -53,6 +53,8 @@ let state;
 let history = [];
 let future = [];
 let textView = false;
+let inspectedRoom = null;
+let roomMotion;
 
 try {
   const saved = JSON.parse(localStorage.getItem(storageKey));
@@ -87,8 +89,7 @@ function saveProgress() {
 
 function parentRoom(roomId) {
   const owner = map.rooms[roomId].owner;
-  const parent = owner < 0 ? -1 : state.positions[owner][0];
-  return parent === roomId ? -1 : parent;
+  return owner < 0 ? -1 : state.positions[owner][0];
 }
 
 function roomLabel(roomId) {
@@ -105,55 +106,65 @@ function roomLabel(roomId) {
 }
 
 function inspectRoom(roomId, crossing) {
-  const viewedRoom = Number((inspector.open ? previewBoard : board).dataset.room);
-  const allowCurrent = crossing.direction === 'in' && roomId === viewedRoom;
-  if (!allowCurrent && roomId === state.positions[0][0]) {
-    inspector.close();
-    return;
-  }
-  renderScene(previewBoard, roomId, inspector.open ? crossing : null);
-  $('intro-inspector-title').textContent = roomLabel(roomId);
-  const hadParentFocus = document.activeElement === previewParent;
-  previewParent.hidden = parentRoom(roomId) < 0;
-  if (!inspector.open) inspector.showModal();
-  else if (hadParentFocus && previewParent.hidden) $('intro-close-inspector').focus();
+  inspectedRoom = roomId === state.positions[0][0] ? null : roomId;
+  render(crossing ? [crossing] : []);
 }
 
 function inspectParent() {
-  const roomId = inspector.open ? Number(previewBoard.dataset.room) : state.positions[0][0];
+  const roomId = inspectedRoom ?? state.positions[0][0];
   const parent = parentRoom(roomId);
   if (parent >= 0) inspectRoom(parent, { direction: 'out', owner: map.rooms[roomId].owner });
-  else if (inspector.open) inspector.close();
+  else returnToPlayer();
+}
+
+function returnToPlayer() {
+  if (inspectedRoom !== null) inspectRoom(state.positions[0][0]);
+}
+
+function cameraCrossing(crossings, previousRoom, roomId) {
+  const first = crossings[0];
+  const last = crossings.at(-1);
+  if (first?.direction === 'out' && last.direction === 'in') {
+    if (state.positions[first.owner][0] === roomId) return first;
+    if (state.positions[last.owner][0] === previousRoom) return last;
+    return { direction: 'across' };
+  }
+  if (first) return first.direction === 'out' ? last : first;
+  if (board.children.length && previousRoom !== roomId) {
+    if (parentRoom(roomId) === previousRoom) return { direction: 'in', owner: map.rooms[roomId].owner };
+    if (parentRoom(previousRoom) === roomId) return { direction: 'out', owner: map.rooms[previousRoom].owner };
+    return { direction: 'across' };
+  }
+  if (board.hidden && inspectedRoom !== null) return { direction: 'across' };
 }
 
 function render(crossings = []) {
-  const [roomId, x, y] = state.positions[0];
+  const [playerRoom, x, y] = state.positions[0];
+  const inspecting = inspectedRoom !== null;
+  const roomId = inspectedRoom ?? playerRoom;
+  const showText = textView && !inspecting;
   const covered = placed(map, state);
   const solved = won(map, state, covered);
-  const previousRoom = Number(board.dataset.room);
-  let crossing = crossings[0];
-  if (crossing?.direction === 'out') crossing = crossings.findLast(entry => entry.direction === 'out');
-  if (!crossing && board.children.length && previousRoom !== roomId) {
-    const entering = parentRoom(roomId) === previousRoom;
-    crossing = { direction: entering ? 'in' : 'out', owner: map.rooms[entering ? roomId : previousRoom].owner };
-  }
-  renderScene(board, roomId, textView ? null : crossing);
-  if (textView) renderTextMaps(roomId);
+  renderScene(roomId, cameraCrossing(crossings, Number(board.dataset.room), roomId), showText);
+  if (showText) renderTextMaps(playerRoom);
   $('intro-room').hidden = map.rooms.length === 1 && map.rooms[0].owner < 0;
-  $('intro-room').textContent = roomLabel(roomId);
+  $('intro-room').textContent = (inspecting ? '正在查看 · ' : '') + roomLabel(roomId);
   const canLookOut = parentRoom(roomId) >= 0;
-  $('intro-view-parent').hidden = !canLookOut;
-  stage.classList.toggle('can-look-out', canLookOut);
-  board.setAttribute('aria-label', '棋盘，玩家第 ' + (x + 1) + ' 列，第 ' + (y + 1) + ' 行');
+  parentButton.hidden = !canLookOut;
+  returnButton.hidden = !inspecting;
+  for (const button of moveButtons) button.disabled = inspecting;
+  stage.classList.toggle('can-look-out', canLookOut || inspecting);
+  board.setAttribute('aria-label', inspecting ? '正在查看' + roomLabel(roomId) :
+    '棋盘，玩家第 ' + (x + 1) + ' 列，第 ' + (y + 1) + ' 行');
   $('intro-count').textContent = state.moves + ' 步 · 推箱 ' + state.pushes + ' 次';
   $('intro-status').textContent = solved ? '通关！' : covered === map.goals.length ?
     '箱子都到位了，走到玩家终点即可通关。' : '箱子到位 ' + covered + ' / ' + map.goals.length;
   $('intro-status').classList.toggle('success', solved);
   $('intro-next').hidden = !solved || active === levels.length - 1;
   $('intro-next').textContent = active + 1 === chapters[chapterIndex + 1]?.start ? '进入下一章 →' : '下一关 →';
-  $('intro-undo').disabled = history.length === 0;
-  $('intro-redo').disabled = future.length === 0;
-  $('intro-reset').disabled = state === map.initial;
+  $('intro-undo').disabled = inspecting || history.length === 0;
+  $('intro-redo').disabled = inspecting || future.length === 0;
+  $('intro-reset').disabled = inspecting || state === map.initial;
   for (const [number, button] of levelButtons.entries()) {
     const index = Number(button.dataset.level);
     button.setAttribute('aria-pressed', index === active);
@@ -173,11 +184,8 @@ function roomColor(roomId) {
 }
 
 function setTextView(enabled) {
-  clearRoomMotion(board);
+  clearRoomMotion();
   textView = enabled;
-  board.hidden = enabled;
-  textMaps.hidden = !enabled;
-  stage.classList.toggle('text-view', enabled);
   displayMode.textContent = enabled ? '图形显示' : '字符显示';
 }
 
@@ -200,10 +208,7 @@ function renderTextMaps(playerRoom) {
       }
       button.append(label, lines);
       button.addEventListener('click', () => {
-        const current = state.positions[0][0];
-        if (current === roomId) return;
-        const entering = parentRoom(roomId) === current;
-        inspectRoom(roomId, { direction: entering ? 'in' : 'out', owner: map.rooms[entering ? roomId : current].owner });
+        if (state.positions[0][0] !== roomId) inspectRoom(roomId);
       });
       textMaps.append(button);
     }
@@ -236,6 +241,14 @@ function floorColor(roomId) {
 
 function drawRoomMap(canvas, roomId, size = 10) {
   const room = map.rooms[roomId];
+  const pieces = [];
+  for (const [index, [id, x, y]] of state.positions.entries()) {
+    if (id === roomId) pieces.push([index, x, y]);
+  }
+  const signature = pieces.join('|');
+  const cached = roomMaps.get(canvas);
+  if (cached?.map === map && cached.roomId === roomId && cached.size === size && cached.signature === signature) return;
+  roomMaps.set(canvas, { map, roomId, size, signature });
   canvas.width = room.width * size;
   canvas.height = room.height * size;
   const context = canvas.getContext('2d');
@@ -253,8 +266,7 @@ function drawRoomMap(canvas, roomId, size = 10) {
   const playerColor = board.classList.contains('reference-chapter') ? '#c53d3a' :
     map.eat ? '#d260bd' : emptyChapter ? '#db562f' : '#df328d';
   const crateColor = map.eat ? '#ffdc72' : emptyChapter ? '#add444' : board.classList.contains('blue-crates') ? '#38bce8' : '#ffb63a';
-  for (const [index, [id, x, y]] of state.positions.entries()) {
-    if (id !== roomId) continue;
+  for (const [index, x, y] of pieces) {
     const child = map.inside[index];
     context.fillStyle = index === 0 ? playerColor : child >= 0 ? roomColor(child) : crateColor;
     context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
@@ -278,59 +290,118 @@ function renderSurround(scene, roomId) {
   drawRoomMap(outside, parentId, 32);
 }
 
-function clearRoomMotion(container) {
-  for (const animation of container.getAnimations()) animation.cancel();
-  container.parentElement.querySelector('.intro-ghost')?.remove();
+function clearRoomMotion() {
+  roomMotion?.animation.cancel();
+  roomMotion?.ghost?.remove();
+  roomMotion = undefined;
 }
 
-function renderScene(container, roomId, crossing) {
-  const scene = container.parentElement;
-  const animate = crossing && !reduceMotion.matches && container.children.length;
-  const entering = crossing?.direction === 'in';
-  const shell = crossing ? '[data-shell="' + crossing.owner + '"]' : null;
-  let oldRect, oldShell, ghost;
+function boardFrame(element) {
+  const rect = element.getBoundingClientRect();
+  return { rect, opacity: Number(getComputedStyle(element).opacity) };
+}
 
-  if (crossing) clearRoomMotion(container);
-  if (animate) {
-    oldRect = container.getBoundingClientRect();
-    oldShell = entering && container.querySelector(shell)?.getBoundingClientRect();
-    ghost = container.cloneNode(true);
-    ghost.removeAttribute('id');
-    ghost.setAttribute('aria-hidden', 'true');
-    ghost.inert = true;
-    ghost.classList.add('intro-ghost');
-    const sources = container.querySelectorAll('canvas');
-    ghost.querySelectorAll('canvas').forEach((canvas, index) => canvas.getContext('2d').drawImage(sources[index], 0, 0));
+function cloneBoard() {
+  const ghost = board.cloneNode(true);
+  ghost.removeAttribute('id');
+  ghost.setAttribute('aria-hidden', 'true');
+  ghost.inert = true;
+  ghost.classList.add('intro-ghost');
+  const sources = board.querySelectorAll('canvas');
+  ghost.querySelectorAll('canvas').forEach((canvas, index) => canvas.getContext('2d').drawImage(sources[index], 0, 0));
+  return ghost;
+}
+
+function cameraPose(rect, anchor, target) {
+  const scale = Math.min(target.width / anchor.width, target.height / anchor.height);
+  return {
+    x: target.left + target.width / 2 - rect.left - rect.width / 2 +
+      (rect.left + rect.width / 2 - anchor.left - anchor.width / 2) * scale,
+    y: target.top + target.height / 2 - rect.top - rect.height / 2 +
+      (rect.top + rect.height / 2 - anchor.top - anchor.height / 2) * scale,
+    scale,
+  };
+}
+
+const restingPose = { x: 0, y: 0, scale: 1 };
+
+function animateCamera(element, from, to, fromOpacity, toOpacity, duration) {
+  const frames = Array.from({ length: 9 }, (_, index) => {
+    const progress = index / 8;
+    const scale = from.scale * (to.scale / from.scale) ** progress;
+    const zoom = to.scale === from.scale ? progress : (scale - from.scale) / (to.scale - from.scale);
+    const x = from.x + (to.x - from.x) * zoom;
+    const y = from.y + (to.y - from.y) * zoom;
+    return {
+      opacity: fromOpacity + (toOpacity - fromOpacity) * progress,
+      transform: 'translate(' + x + 'px, ' + y + 'px) scale(' + scale + ')',
+    };
+  });
+  return element.animate(frames, { duration, easing: 'linear', fill: 'backwards' });
+}
+
+function renderScene(roomId, crossing, showText) {
+  const animate = crossing && !showText && !reduceMotion.matches;
+  const entering = crossing?.direction === 'in';
+  const shell = crossing?.owner >= 0 ? '[data-shell="' + crossing.owner + '"]' : null;
+  let oldFrame, oldShell, returningFrame, ghost;
+  if (animate && board.children.length && !board.hidden) {
+    // Measure the interpolated frame while the previous animation is still active.
+    oldFrame = boardFrame(board);
+    oldShell = entering && shell ? board.querySelector(shell)?.getBoundingClientRect() : null;
+    const previous = roomMotion?.ghost;
+    if (previous?.isConnected && previous.dataset.room === String(roomId) &&
+        roomMotion.crossing.direction !== crossing.direction) {
+      returningFrame = boardFrame(previous);
+    }
+    ghost = cloneBoard();
   }
 
-  renderRoom(container, roomId);
-  renderSurround(scene, roomId);
-  if (!ghost || !oldRect.width) return;
+  if (crossing || showText) clearRoomMotion();
+  board.hidden = showText;
+  textMaps.hidden = !showText;
+  stage.classList.toggle('text-view', showText);
+  renderRoom(board, roomId);
+  renderSurround(stage, roomId);
+  if (!animate) return;
 
-  const area = scene.getBoundingClientRect();
-  const nextRect = container.getBoundingClientRect();
-  const target = entering ? oldShell : container.querySelector(shell)?.getBoundingClientRect();
-  const zoomed = entering ? nextRect : oldRect;
-  const anchor = target || zoomed;
-  const tx = anchor.left + anchor.width / 2 - zoomed.left - zoomed.width / 2;
-  const ty = anchor.top + anchor.height / 2 - zoomed.top - zoomed.height / 2;
-  const scale = target ? Math.min(target.width / zoomed.width, target.height / zoomed.height) : 0.24;
-  const zoom = 'translate(' + tx + 'px, ' + ty + 'px) scale(' + scale + ')';
-  const timing = { duration: 220, easing: 'cubic-bezier(.25,.7,.28,1)' };
-  Object.assign(ghost.style, {
-    left: oldRect.left - area.left - scene.clientLeft + 'px',
-    top: oldRect.top - area.top - scene.clientTop + 'px',
-    width: oldRect.width + 'px',
-    height: oldRect.height + 'px',
-    zIndex: entering ? '0' : '2',
-  });
-  scene.append(ghost);
-  ghost.animate([{ opacity: 1 }, { opacity: 0, transform: entering ? 'scale(1.12)' : zoom }], timing)
-    .onfinish = () => ghost.remove();
-  container.animate([
-    { opacity: entering ? 0.55 : 0.7, transform: entering ? zoom : 'scale(1.1)' },
-    { opacity: 1, transform: 'none' },
-  ], timing);
+  const nextRect = board.getBoundingClientRect();
+  const oldRect = oldFrame?.rect;
+  const nextShell = !entering && shell ? board.querySelector(shell)?.getBoundingClientRect() : null;
+  let incoming = restingPose;
+  let outgoing = restingPose;
+  let opacity = 0;
+  if (oldShell?.width && nextRect.width) {
+    incoming = cameraPose(nextRect, nextRect, oldShell);
+    outgoing = cameraPose(oldRect, oldShell, nextRect);
+    opacity = oldFrame.opacity;
+  } else if (nextShell?.width && oldRect?.width) {
+    incoming = cameraPose(nextRect, nextShell, oldRect);
+    outgoing = cameraPose(oldRect, oldRect, nextShell);
+  }
+  if (returningFrame?.rect.width && nextRect.width) {
+    incoming = cameraPose(nextRect, nextRect, returningFrame.rect);
+    opacity = returningFrame.opacity;
+  }
+  const distance = Math.max(Math.abs(Math.log(incoming.scale)), Math.abs(Math.log(outgoing.scale)));
+  const duration = Math.max(110, Math.min(240, distance * 100));
+  if (ghost && oldRect.width) {
+    const area = stage.getBoundingClientRect();
+    Object.assign(ghost.style, {
+      left: oldRect.left - area.left - stage.clientLeft + 'px',
+      top: oldRect.top - area.top - stage.clientTop + 'px',
+      width: oldRect.width + 'px',
+      height: oldRect.height + 'px',
+      zIndex: entering ? '0' : '2',
+    });
+    stage.append(ghost);
+    animateCamera(ghost, restingPose, outgoing, oldFrame.opacity, 0, duration).onfinish = () => ghost.remove();
+  }
+  const animation = animateCamera(board, incoming, restingPose, opacity, 1, duration);
+  roomMotion = { animation, ghost, crossing };
+  animation.onfinish = () => {
+    if (roomMotion?.animation === animation) roomMotion = undefined;
+  };
 }
 
 function renderRoom(container, roomId) {
@@ -382,8 +453,8 @@ function renderRoom(container, roomId) {
 }
 
 function openLevel(index) {
-  clearRoomMotion(board);
-  clearRoomMotion(previewBoard);
+  clearRoomMotion();
+  inspectedRoom = null;
   active = index;
   const level = levels[index];
   const nextChapter = chapters.findLastIndex(chapter => index >= chapter.start);
@@ -414,14 +485,11 @@ function openLevel(index) {
   $('intro-title').textContent = '第 ' + (active - chapters[chapterIndex].start + 1) + ' 关 · ' + level.title;
   $('intro-hint').textContent = level.hint;
   const blueCrates = chapterIndex === 1 && level.crateColor !== 'gold';
-  for (const container of [board, previewBoard]) {
-    container.classList.toggle('blue-crates', blueCrates);
-    container.classList.toggle('empty-chapter', theme === 'empty');
-    container.classList.toggle('eat-chapter', theme === 'eat');
-    container.classList.toggle('reference-chapter', theme === 'reference');
-  }
+  board.classList.toggle('blue-crates', blueCrates);
+  board.classList.toggle('empty-chapter', theme === 'empty');
+  board.classList.toggle('eat-chapter', theme === 'eat');
+  board.classList.toggle('reference-chapter', theme === 'reference');
   board.replaceChildren();
-  previewBoard.replaceChildren();
   textMaps.replaceChildren();
   displayMode.hidden = !level.textView;
   setTextView(Boolean(level.textView));
@@ -430,7 +498,7 @@ function openLevel(index) {
 }
 
 function move(direction) {
-  if (won(map, state)) return;
+  if (inspectedRoom !== null || won(map, state)) return;
   applyState(step(map, state, direction));
 }
 
@@ -484,23 +552,17 @@ $('intro-chapter').addEventListener('change', event => {
   openLevel(chapters[Number(event.target.value)].start);
   event.target.blur();
 });
-$('intro-close-inspector').addEventListener('click', () => inspector.close());
-inspector.addEventListener('close', () => {
-  if (!inspector.open) clearRoomMotion(previewBoard);
-});
-$('intro-view-parent').addEventListener('click', inspectParent);
+returnButton.addEventListener('click', returnToPlayer);
+parentButton.addEventListener('click', inspectParent);
 displayMode.addEventListener('click', () => {
+  inspectedRoom = null;
   setTextView(!textView);
   render();
 });
-previewParent.addEventListener('click', inspectParent);
 stage.addEventListener('click', event => {
   if (event.target === stage || event.target === textMaps) inspectParent();
 });
-inspector.addEventListener('click', event => {
-  if (event.target === inspector || event.target === previewStage) inspectParent();
-});
-document.querySelectorAll('[data-move]').forEach(button => button.addEventListener('click', () => move(Number(button.dataset.move))));
+for (const button of moveButtons) button.addEventListener('click', () => move(Number(button.dataset.move)));
 $('intro-undo').addEventListener('click', undo);
 $('intro-redo').addEventListener('click', redo);
 $('intro-reset').addEventListener('click', () => applyState(map.initial));
@@ -508,12 +570,17 @@ $('intro-next').addEventListener('click', () => {
   if (won(map, state) && active + 1 < levels.length) openLevel(active + 1);
 });
 document.addEventListener('keydown', event => {
-  if (inspector.open || event.target.closest('select') || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
+  if (event.target.closest('select') || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
   const key = event.key.toLowerCase();
+  if (key === 'escape' && inspectedRoom !== null) {
+    event.preventDefault();
+    returnToPlayer();
+    return;
+  }
   const direction = moveKeys[key];
   if (key === 'z' || key === 'x' || key === 'r' || typeof direction === 'number') {
     event.preventDefault();
-    if (event.repeat) return;
+    if (event.repeat || inspectedRoom !== null) return;
     if (key === 'z') undo();
     else if (key === 'x') redo();
     else if (key === 'r') applyState(map.initial);

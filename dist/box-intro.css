@@ -15,14 +15,16 @@
 .intro-room-info p { margin: 0; }
 .intro-scene { position: relative; isolation: isolate; container-type: size; display: grid; place-items: center; overflow: hidden; background: var(--surround-color, #cbcbce); }
 .intro-stage { height: clamp(265px, 70vw, 478px); padding: 18px; border: 1px solid var(--line); border-radius: 12px; }
-.intro-stage.can-look-out, .intro-preview-stage { cursor: pointer; }
-.intro-stage .intro-board, .intro-preview-stage .intro-board { cursor: default; }
-.intro-preview-stage { height: clamp(225px, 62dvh, 364px); padding: 12px; }
+@media (prefers-reduced-motion: no-preference) {
+  .intro-stage { transition: background-color 150ms linear; }
+}
+.intro-stage.can-look-out { cursor: pointer; }
+.intro-stage .intro-board { cursor: default; }
 .intro-board { display: grid; grid-template-columns: repeat(var(--columns), minmax(0, 1fr)); width: 100%; max-width: calc(440px * var(--columns) / var(--longest-side)); user-select: none; overflow: hidden; border-radius: 8px; }
 .intro-scene > :is(.intro-board, .intro-surround) { --scene-side: min(100cqw, 100cqh, 440px); }
 .intro-scene.with-surround > :is(.intro-board, .intro-surround) { --scene-side: min(85cqw, 85cqh, 396px); }
 .intro-scene > .intro-board { position: relative; z-index: 1; width: calc(var(--scene-side) * var(--columns) / var(--longest-side)); }
-.intro-scene > .intro-ghost { position: absolute; max-width: none; pointer-events: none; z-index: 2; }
+.intro-scene > .intro-ghost { position: absolute; max-width: none; opacity: 0; pointer-events: none; z-index: 2; }
 .intro-surround { position: absolute; pointer-events: none; opacity: .65; width: calc(var(--scene-side) * var(--outer-columns)); height: calc(var(--scene-side) * var(--outer-rows)); left: 50%; top: 50%; transform: translate(calc(-1 * var(--scene-side) * var(--outer-x)), calc(-1 * var(--scene-side) * var(--outer-y))); }
 .intro-stage.text-view { background: #17151c; }
 .intro-stage.text-view .intro-surround { visibility: hidden; }
@@ -68,16 +70,8 @@
 .intro-board .room-box canvas { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .intro-board .room-box.room-on-goal { outline: 2px solid #f5dfa7; outline-offset: 1px; }
 .intro-board .cell:has(> .room-box) { z-index: 1; }
-#intro-inspector { width: min(400px, calc(100% - 24px)); opacity: 0; transform: scale(.95); transition: opacity 180ms, transform 180ms, display 180ms allow-discrete, overlay 180ms allow-discrete; }
-#intro-inspector[open] { opacity: 1; transform: none; }
-#intro-inspector:not([open]) { pointer-events: none; }
-#intro-inspector::backdrop { background: #53625446; transition: background 180ms; }
-#intro-inspector:not([open])::backdrop { background: transparent; pointer-events: none; }
-@starting-style { #intro-inspector[open] { opacity: 0; transform: scale(.95); } }
-@media (prefers-reduced-motion: reduce) {
-  #intro-inspector, #intro-inspector::backdrop { transition: none; }
-}
 .intro-controls, .intro-result { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.intro-controls .tools-group { flex-wrap: wrap; }
 .intro-controls .outline { padding: 8px; font-size: 12px; white-space: nowrap; }
 .intro-result { min-height: 36px; }
 .intro-keyboard { margin-top: 12px; }

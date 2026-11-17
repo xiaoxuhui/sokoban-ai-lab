@@ -7,11 +7,11 @@
   <meta name="theme-color" content="#111715">
   <title>套箱模式 · 入门</title>
   <link rel="stylesheet" href="style.css?v=47">
-  <link rel="stylesheet" href="box-intro.css?v=11">
+  <link rel="stylesheet" href="box-intro.css?v=12">
   <script src="box-rooms.js?v=5" defer></script>
-  <script src="box-levels.js?v=8" defer></script>
+  <script src="box-levels.js?v=9" defer></script>
   <script src="box-portals.js?v=1" defer></script>
-  <script src="box-intro.js?v=12" defer></script>
+  <script src="box-intro.js?v=13" defer></script>
 </head>
 <body>
   <header class="top">
@@ -49,6 +49,7 @@
           <button class="outline" id="intro-undo" aria-keyshortcuts="Z" type="button" disabled>撤销 <kbd>Z</kbd></button>
           <button class="outline" id="intro-redo" aria-keyshortcuts="X" type="button" disabled>重做 <kbd>X</kbd></button>
           <button class="outline" id="intro-reset" aria-keyshortcuts="R" type="button">重开</button>
+          <button class="outline" id="intro-return" aria-keyshortcuts="Escape" type="button" hidden>回到玩家</button>
         </div>
         <div class="dpad" aria-label="移动">
           <button type="button" data-move="3" aria-label="向左">←</button>
@@ -67,18 +68,5 @@
     </section>
     <p class="intro-keyboard secondary">方向键或 WASD 移动 · Z 撤销 · X 重做 · R 重开</p>
   </main>
-  <dialog id="intro-inspector" aria-labelledby="intro-inspector-title">
-    <div class="panel-heading">
-      <h2 id="intro-inspector-title">箱内</h2>
-      <div class="tools-group">
-        <button class="outline docs" id="intro-preview-parent" type="button" hidden>查看外层</button>
-        <button class="outline docs" id="intro-close-inspector" type="button" autofocus>关闭</button>
-      </div>
-    </div>
-    <div id="intro-preview-stage" class="intro-preview-stage intro-scene">
-      <canvas class="intro-surround" aria-hidden="true" hidden></canvas>
-      <div id="intro-preview-board" class="intro-board" role="group" aria-label="房间棋盘"></div>
-    </div>
-  </dialog>
 </body>
 </html>
