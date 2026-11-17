@@ -57,17 +57,19 @@ function saveProgress() {
 
 function parentRoom(roomId) {
   const owner = map.rooms[roomId].owner;
-  return owner < 0 ? -1 : state.positions[owner][0];
+  const parent = owner < 0 ? -1 : state.positions[owner][0];
+  return parent === roomId ? -1 : parent;
 }
 
 function roomLabel(roomId) {
+  if (roomId === 0 && map.rooms[0].owner >= 0) return '自引用棋盘';
   let depth = 0;
   for (let room = parentRoom(roomId); room >= 0; room = parentRoom(room)) depth++;
   return depth ? '箱内第 ' + depth + ' 层' : '外层';
 }
 
-function inspectRoom(roomId) {
-  if (roomId === state.positions[0][0]) {
+function inspectRoom(roomId, allowCurrent = false) {
+  if (!allowCurrent && roomId === state.positions[0][0]) {
     inspector.close();
     return;
   }
@@ -91,7 +93,7 @@ function render() {
   const covered = placed(map, state);
   const solved = won(map, state, covered);
   renderRoom(board, roomId);
-  $('intro-room').hidden = map.rooms.length === 1;
+  $('intro-room').hidden = map.rooms.length === 1 && map.rooms[0].owner < 0;
   $('intro-room').textContent = roomLabel(roomId);
   const canLookOut = parentRoom(roomId) >= 0;
   $('intro-view-parent').hidden = !canLookOut;
@@ -143,7 +145,7 @@ function drawMiniature(canvas, roomId) {
   for (const [index, [id, x, y]] of state.positions.entries()) {
     if (id !== roomId) continue;
     const child = map.inside[index];
-    context.fillStyle = index === 0 ? '#df328d' : child >= 0 ? roomColor(child) : chapterIndex === 1 ? '#38bce8' : '#ffb63a';
+    context.fillStyle = index === 0 ? '#df328d' : child >= 0 ? roomColor(child) : board.classList.contains('blue-crates') ? '#38bce8' : '#ffb63a';
     context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
   }
 }
@@ -183,9 +185,10 @@ function renderRoom(container, roomId) {
         button.type = 'button';
         button.className = goal ? 'room-box room-on-goal' : 'room-box';
         button.style.setProperty('--box-color', roomColor(child));
-        button.setAttribute('aria-label', '查看第 ' + (index % room.width + 1) + ' 列第 ' + (Math.floor(index / room.width) + 1) + ' 行的箱内房间');
+        button.setAttribute('aria-label', child === roomId ? '查看小箱子里的同一张棋盘' :
+          '查看第 ' + (index % room.width + 1) + ' 列第 ' + (Math.floor(index / room.width) + 1) + ' 行的箱内房间');
         button.append(document.createElement('canvas'));
-        button.addEventListener('click', () => inspectRoom(child));
+        button.addEventListener('click', () => inspectRoom(child, child === roomId));
         cell.append(button);
       } else if (crate) addPiece(cell, goal ? 'crate placed' : 'crate');
     }
@@ -221,8 +224,9 @@ function openLevel(index) {
   future = [];
   $('intro-title').textContent = '第 ' + (active - chapters[chapterIndex].start + 1) + ' 关 · ' + level.title;
   $('intro-hint').textContent = level.hint;
-  board.classList.toggle('enter-chapter', chapterIndex === 1);
-  previewBoard.classList.toggle('enter-chapter', chapterIndex === 1);
+  const blueCrates = chapterIndex === 1 && level.crateColor !== 'gold';
+  board.classList.toggle('blue-crates', blueCrates);
+  previewBoard.classList.toggle('blue-crates', blueCrates);
   board.replaceChildren();
   previewBoard.replaceChildren();
   saveProgress();

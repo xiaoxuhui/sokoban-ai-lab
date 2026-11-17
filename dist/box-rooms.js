@@ -19,6 +19,8 @@
     for (const [roomId, room] of rooms.entries()) {
       for (let cell = 0; cell < room.tiles.length; cell++) {
         const symbol = room.tiles[cell];
+        const name = symbol.toLowerCase();
+        const child = roomIds.get(name === 'r' ? 'root' : name) ?? -1;
         const x = cell % room.width;
         const y = Math.floor(cell / room.width);
         const position = [roomId, x, y];
@@ -27,9 +29,8 @@
         if (symbol === '@' || symbol === 'P') {
           if (positions[0]) throw Error('关卡只能有一个玩家。');
           positions[0] = position;
-        } else if (symbol === '$' || symbol === '*' || roomIds.has(symbol.toLowerCase())) {
-          if (roomIds.has(symbol.toLowerCase()) && /[A-Z]/.test(symbol)) goals.push(position);
-          const child = roomIds.get(symbol.toLowerCase()) ?? -1;
+        } else if (symbol === '$' || symbol === '*' || child >= 0) {
+          if (child >= 0 && symbol !== name) goals.push(position);
           if (child >= 0) {
             if (rooms[child].owner !== -1) throw Error('每间箱内房间只能有一个外壳。');
             rooms[child].owner = positions.length;
@@ -63,9 +64,14 @@
     const moving = new Set();
 
     function insideOwnBox(entity, roomId) {
-      for (let current = roomId; map.rooms[current].owner >= 0;) {
+      const ownRoom = map.inside[entity];
+      if (ownRoom < 0 || positions[entity][0] === roomId) return false;
+      const visited = new Set();
+      for (let current = roomId; !visited.has(current);) {
+        if (current === ownRoom) return true;
         const owner = map.rooms[current].owner;
-        if (owner === entity) return true;
+        if (owner < 0) break;
+        visited.add(current);
         current = positions[owner][0];
       }
       return false;
@@ -80,29 +86,34 @@
     }
 
     function advance(entity, [roomId, x, y], offset) {
-      const room = map.rooms[roomId];
-      const nextX = x + dx;
-      const nextY = y + dy;
-      if (nextX >= 0 && nextY >= 0 && nextX < room.width && nextY < room.height) {
-        return land(entity, roomId, nextX, nextY, offset);
+      const exited = new Set();
+      while (true) {
+        const room = map.rooms[roomId];
+        const nextX = x + dx;
+        const nextY = y + dy;
+        if (nextX >= 0 && nextY >= 0 && nextX < room.width && nextY < room.height) {
+          return land(entity, roomId, nextX, nextY, offset, new Set());
+        }
+        if (room.owner < 0 || room.owner === entity || exited.has(roomId)) return false;
+        exited.add(roomId);
+        offset = horizontal ? (y + offset) / room.height : (x + offset) / room.width;
+        [roomId, x, y] = positions[room.owner];
       }
-      if (room.owner < 0 || room.owner === entity) return false;
-      const scaled = horizontal ? (y + offset) / room.height : (x + offset) / room.width;
-      return advance(entity, positions[room.owner], scaled);
     }
 
-    function land(entity, roomId, x, y, offset) {
+    function land(entity, roomId, x, y, offset, entered) {
       const room = map.rooms[roomId];
       if (room.tiles[y * room.width + x] === '#' || insideOwnBox(entity, roomId)) return false;
       const occupant = positions.findIndex(position => matches(position, roomId, x, y));
       if (occupant >= 0 && !moveEntity(occupant, positions[occupant], 0.5)) {
         const childId = map.inside[occupant];
-        if (occupant === entity || childId < 0) return false;
+        if (occupant === entity || childId < 0 || entered.has(occupant)) return false;
+        entered.add(occupant);
         const child = map.rooms[childId];
         const scaled = offset * (horizontal ? child.height : child.width);
         const lane = Math.floor(scaled);
         return land(entity, childId, horizontal ? (dx > 0 ? 0 : child.width - 1) : lane,
-          horizontal ? lane : (dy > 0 ? 0 : child.height - 1), scaled - lane);
+          horizontal ? lane : (dy > 0 ? 0 : child.height - 1), scaled - lane, entered);
       }
       positions[entity] = [roomId, x, y];
       return true;

@@ -31,8 +31,8 @@
 .intro-board .cell > .crate, .intro-board .cell > .player { width: 87%; height: 87%; }
 .intro-board .crate { background: #ffb63a; border-color: #ffcf74; box-shadow: inset 0 -3px #bd791a, 0 2px 4px #211510a6; }
 .intro-board .crate.placed { background: #ffcf73; border-color: #ffe2a2; }
-.enter-chapter .crate { background: #38bce8; border-color: #94ddf8; box-shadow: inset 0 -3px #237fa4, 0 2px 4px #211510a6; }
-.enter-chapter .crate.placed { background: #71daff; border-color: #dbf7ff; }
+.blue-crates .crate { background: #38bce8; border-color: #94ddf8; box-shadow: inset 0 -3px #237fa4, 0 2px 4px #211510a6; }
+.blue-crates .crate.placed { background: #71daff; border-color: #dbf7ff; }
 .intro-board .crate::before, .intro-board .crate::after { content: none; }
 .intro-board .player { background: #cf197a; border-color: #ff79bd; border-radius: 4px; box-shadow: inset 0 -3px #941555, 0 2px 4px #211020a6; }
 .intro-board .player::before, .intro-board .player::after { content: none; }

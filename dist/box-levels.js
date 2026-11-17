@@ -1,6 +1,7 @@
 'use strict';
 
 // A lowercase letter marks a room box. Its uppercase form also marks a box goal.
+// The letter r links the small box to the main room.
 // A period marks a box goal, and p marks the player's goal.
 const BoxCampaign = {
   intro: [
@@ -114,6 +115,67 @@ const BoxCampaign = {
       rows: ["       ", " @ $ $ ", "   .   ", " $.p.$ ", "   .   ", " $ $ a ", "       "],
       rooms: { a: ["###", "#  ", "# #"] },
       colors: { a: "#f3a353" },
+      challenge: true,
+    },
+    {
+      title: "箱子深处",
+      hint: "顺着几层箱子进去，找出能把小黄箱送回外层的路线。",
+      rows: ["p   #", "    #", ". @ a", "    #", "    #"],
+      rooms: {
+        a: ["    #", "    #", "    b", "    #", "    #"],
+        b: ["     ", "   # ", "   #c", "   # ", "     "],
+        c: ["#####", "#d   ", "     ", "##   ", "#####"],
+        d: ["#####", "#   #", "# $  ", "#   #", "## ##"],
+      },
+      colors: { a: "#3f90ee", b: "#39d48b", c: "#92e52c", d: "#dcf445" },
+      crateColor: "gold",
+    },
+    {
+      title: "小箱子就是整张棋盘",
+      hint: "从地图边缘出去，留意你出现在小蓝箱的哪一侧。",
+      rows: ["#########", "#####  .#", "#  p## ##", "# @ ## ##", "    ## ##", "#   r  ##", "#   ## ##", "#    ####", "#### ####"],
+      colors: { root: "#388fea" },
+    },
+    {
+      title: "绕到小箱子的下方",
+      hint: "利用边缘出口，试着绕到小蓝箱的另一侧。",
+      rows: ["#########", "#       #", "# ##### #", "# #p    #", "  #    .#", "### @ # #", "#     #r#", "#     # #", "#### ####"],
+      colors: { root: "#388fea" },
+    },
+    {
+      title: "把黄箱送到下面",
+      hint: "小蓝箱的位置决定了黄箱从边缘出去后落在哪一格。",
+      rows: ["#######", "#p @  #", "#     #", "   $ r#", "##### #", "#.    #", "#######"],
+      colors: { root: "#388fea" },
+      crateColor: "gold",
+    },
+    {
+      title: "各走各的方向",
+      hint: "把黄箱送进左边的凹槽，再想办法走到玩家终点。",
+      rows: ["#########", "##      #", "##r @   #", "##      #", "## ## $  ", "## .#   #", "## ######", "## p#####", "#########"],
+      colors: { root: "#388fea" },
+      crateColor: "gold",
+    },
+    {
+      title: "让小蓝箱到你下方",
+      hint: "试着利用上方开口，把小蓝箱从另一侧送回来。",
+      rows: ["#### ####", "#    ####", "# #### ##", "#       #", "#       #", "### #####", "#p r#  ##", "#.  @  ##", "#########"],
+      colors: { root: "#388fea" },
+    },
+    {
+      title: "换个方向推出去",
+      hint: "左边和下方都有开口，试试把黄箱往不同方向推出。",
+      rows: ["#########", "#   $  r#", "#       #", "# @  ## #", "     #  #", "## ###  #", "## #p#  #", "##   .###", "#### ####"],
+      colors: { root: "#388fea" },
+      crateColor: "gold",
+      challenge: true,
+    },
+    {
+      title: "两个箱子的顺序",
+      hint: "左侧两个方框都要填满，试试先送哪个箱子。",
+      rows: ["#########", "#    #  #", "#    #  #", "# r $   #", "# .  #  #", "# .  #  #", "# p@#####", "#    ####", "#### ####"],
+      colors: { root: "#388fea" },
+      crateColor: "gold",
       challenge: true,
     },
   ],
