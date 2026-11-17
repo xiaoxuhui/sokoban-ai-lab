@@ -10,7 +10,12 @@
 .intro-hint, .intro-count, .intro-result p { margin: 0; }
 #intro-hint { line-height: 1.5; }
 .intro-count { margin-top: 4px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.intro-room-info { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.intro-room-info p { margin: 0; }
 .intro-stage { display: grid; place-items: center; min-height: clamp(255px, 44vh, 424px); padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--well); }
+.intro-stage.can-look-out, .intro-preview-stage { cursor: pointer; }
+.intro-stage .intro-board, .intro-preview-stage .intro-board { cursor: default; }
+.intro-preview-stage { display: grid; place-items: center; padding: 12px; }
 .intro-board { display: grid; grid-template-columns: repeat(var(--columns), minmax(0, 1fr)); width: 100%; max-width: calc(440px * var(--columns) / var(--longest-side)); user-select: none; overflow: hidden; border-radius: 8px; }
 .intro-board .cell { aspect-ratio: 1; border: 0; background: #535257; }
 .intro-board .cell.wall { border-radius: 0; background: var(--room-color, #cbcbce); box-shadow: none; }

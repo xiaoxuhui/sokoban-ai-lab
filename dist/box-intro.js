@@ -26,8 +26,11 @@ const levels = chapters.flatMap(chapter => chapter.levels);
 
 const $ = id => document.getElementById(id);
 const board = $('intro-board');
+const stage = $('intro-stage');
 const inspector = $('intro-inspector');
 const previewBoard = $('intro-preview-board');
+const previewStage = $('intro-preview-stage');
+const previewParent = $('intro-preview-parent');
 let levelButtons = [];
 let chapterIndex = -1;
 const storageKey = 'sokoban-lab-box-intro-v1';
@@ -52,15 +55,47 @@ function saveProgress() {
   } catch { /* The current session can still be played. */ }
 }
 
+function parentRoom(roomId) {
+  const owner = map.rooms[roomId].owner;
+  return owner < 0 ? -1 : state.positions[owner][0];
+}
+
+function roomLabel(roomId) {
+  let depth = 0;
+  for (let room = parentRoom(roomId); room >= 0; room = parentRoom(room)) depth++;
+  return depth ? '箱内第 ' + depth + ' 层' : '外层';
+}
+
+function inspectRoom(roomId) {
+  if (roomId === state.positions[0][0]) {
+    inspector.close();
+    return;
+  }
+  renderRoom(previewBoard, roomId);
+  $('intro-inspector-title').textContent = roomLabel(roomId);
+  const hadParentFocus = document.activeElement === previewParent;
+  previewParent.hidden = parentRoom(roomId) < 0;
+  if (!inspector.open) inspector.showModal();
+  else if (hadParentFocus && previewParent.hidden) $('intro-close-inspector').focus();
+}
+
+function inspectParent() {
+  const roomId = inspector.open ? Number(previewBoard.dataset.room) : state.positions[0][0];
+  const parent = parentRoom(roomId);
+  if (parent >= 0) inspectRoom(parent);
+  else if (inspector.open) inspector.close();
+}
+
 function render() {
   const [roomId, x, y] = state.positions[0];
   const covered = placed(map, state);
   const solved = won(map, state, covered);
   renderRoom(board, roomId);
-  let depth = 0;
-  for (let room = roomId; map.rooms[room].owner >= 0; room = state.positions[map.rooms[room].owner][0]) depth++;
   $('intro-room').hidden = map.rooms.length === 1;
-  $('intro-room').textContent = depth ? '箱内第 ' + depth + ' 层' : '外层';
+  $('intro-room').textContent = roomLabel(roomId);
+  const canLookOut = parentRoom(roomId) >= 0;
+  $('intro-view-parent').hidden = !canLookOut;
+  stage.classList.toggle('can-look-out', canLookOut);
   board.setAttribute('aria-label', '棋盘，玩家第 ' + (x + 1) + ' 列，第 ' + (y + 1) + ' 行');
   $('intro-count').textContent = state.moves + ' 步 · 推箱 ' + state.pushes + ' 次';
   $('intro-status').textContent = solved ? '通关！' : covered === map.goals.length ?
@@ -150,10 +185,7 @@ function renderRoom(container, roomId) {
         button.style.setProperty('--box-color', roomColor(child));
         button.setAttribute('aria-label', '查看第 ' + (index % room.width + 1) + ' 列第 ' + (Math.floor(index / room.width) + 1) + ' 行的箱内房间');
         button.append(document.createElement('canvas'));
-        button.addEventListener('click', () => {
-          renderRoom(previewBoard, child);
-          if (!inspector.open) inspector.showModal();
-        });
+        button.addEventListener('click', () => inspectRoom(child));
         cell.append(button);
       } else if (crate) addPiece(cell, goal ? 'crate placed' : 'crate');
     }
@@ -233,6 +265,14 @@ $('intro-chapter').addEventListener('change', event => {
   event.target.blur();
 });
 $('intro-close-inspector').addEventListener('click', () => inspector.close());
+$('intro-view-parent').addEventListener('click', inspectParent);
+previewParent.addEventListener('click', inspectParent);
+stage.addEventListener('click', event => {
+  if (event.target === stage) inspectParent();
+});
+inspector.addEventListener('click', event => {
+  if (event.target === inspector || event.target === previewStage) inspectParent();
+});
 document.querySelectorAll('[data-move]').forEach(button => button.addEventListener('click', () => move(Number(button.dataset.move))));
 $('intro-undo').addEventListener('click', undo);
 $('intro-redo').addEventListener('click', redo);

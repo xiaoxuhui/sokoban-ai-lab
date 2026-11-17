@@ -7,10 +7,10 @@
   <meta name="theme-color" content="#111715">
   <title>套箱模式 · 入门</title>
   <link rel="stylesheet" href="style.css?v=47">
-  <link rel="stylesheet" href="box-intro.css?v=4">
+  <link rel="stylesheet" href="box-intro.css?v=5">
   <script src="box-rooms.js?v=1" defer></script>
   <script src="box-levels.js?v=1" defer></script>
-  <script src="box-intro.js?v=3" defer></script>
+  <script src="box-intro.js?v=4" defer></script>
 </head>
 <body>
   <header class="top">
@@ -30,11 +30,14 @@
         <div>
           <h2 id="intro-title"></h2>
           <p id="intro-hint" class="secondary"></p>
-          <p id="intro-room" class="secondary" hidden></p>
+          <div class="intro-room-info">
+            <p id="intro-room" class="secondary" hidden></p>
+            <button class="outline docs" id="intro-view-parent" type="button" hidden>查看外层</button>
+          </div>
         </div>
         <p class="move-count intro-count" id="intro-count"></p>
       </div>
-      <div class="intro-stage">
+      <div class="intro-stage" id="intro-stage">
         <div id="intro-board" class="intro-board" role="group" aria-label="棋盘"></div>
       </div>
       <div class="intro-controls">
@@ -58,8 +61,16 @@
     <p class="intro-keyboard secondary">方向键或 WASD 移动 · Z 撤销 · X 重做 · R 重开</p>
   </main>
   <dialog id="intro-inspector" aria-labelledby="intro-inspector-title">
-    <div class="panel-heading"><h2 id="intro-inspector-title">箱内</h2><button class="outline docs" id="intro-close-inspector" type="button">关闭</button></div>
-    <div id="intro-preview-board" class="intro-board" role="group" aria-label="箱内棋盘"></div>
+    <div class="panel-heading">
+      <h2 id="intro-inspector-title">箱内</h2>
+      <div class="tools-group">
+        <button class="outline docs" id="intro-preview-parent" type="button" hidden>查看外层</button>
+        <button class="outline docs" id="intro-close-inspector" type="button" autofocus>关闭</button>
+      </div>
+    </div>
+    <div id="intro-preview-stage" class="intro-preview-stage">
+      <div id="intro-preview-board" class="intro-board" role="group" aria-label="房间棋盘"></div>
+    </div>
   </dialog>
 </body>
 </html>
