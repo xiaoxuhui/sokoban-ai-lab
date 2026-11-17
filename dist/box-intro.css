@@ -40,9 +40,13 @@
 .intro-board .crate.placed { background: #ffcf73; border-color: #ffe2a2; }
 .blue-crates .crate { background: #38bce8; border-color: #94ddf8; box-shadow: inset 0 -3px #237fa4, 0 2px 4px #211510a6; }
 .blue-crates .crate.placed { background: #71daff; border-color: #dbf7ff; }
+.empty-chapter .crate { background: #add444; border-color: #d8ef8d; box-shadow: inset 0 -3px #7a9b29, 0 2px 4px #211510a6; }
+.empty-chapter .crate.placed { background: #d2f261; border-color: #edffae; }
 .intro-board .crate::before, .intro-board .crate::after { content: none; }
 .intro-board .player { background: #cf197a; border-color: #ff79bd; border-radius: 4px; box-shadow: inset 0 -3px #941555, 0 2px 4px #211020a6; }
 .intro-board .player::before, .intro-board .player::after { content: none; }
+.empty-chapter .player { background: #db562f; border-color: #f48b6b; box-shadow: inset 0 -3px #a3381e, 0 2px 4px #211020a6; }
+.empty-chapter .cell:has(> .player)::before, .empty-chapter .cell:has(> .player)::after { background: #682716; }
 .intro-board .room-box { position: absolute; width: 87%; height: 87%; padding: 2px; border-radius: 4px; background: var(--box-color); border: 1px solid #d2e1fa; display: grid; place-items: center; }
 .intro-board .room-box canvas { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .intro-board .room-box.room-on-goal { outline: 2px solid #f5dfa7; outline-offset: 1px; }

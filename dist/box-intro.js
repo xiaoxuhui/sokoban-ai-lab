@@ -18,9 +18,11 @@ const opening = [
     finish: [2, 2],
   },
 ];
+const introLevels = [...opening, ...BoxCampaign.intro];
 const chapters = [
-  { title: '入门', start: 0, levels: [...opening, ...BoxCampaign.intro] },
-  { title: '进入', start: opening.length + BoxCampaign.intro.length, levels: BoxCampaign.enter },
+  { title: '入门', start: 0, levels: introLevels, color: '#cbcbce' },
+  { title: '进入', start: introLevels.length, levels: BoxCampaign.enter, color: '#a4bedf' },
+  { title: '空白', start: introLevels.length + BoxCampaign.enter.length, levels: BoxCampaign.empty, color: '#b7a8a6' },
 ];
 const levels = chapters.flatMap(chapter => chapter.levels);
 
@@ -114,7 +116,7 @@ function render(crossings = []) {
     '箱子都到位了，走到玩家终点即可通关。' : '箱子到位 ' + covered + ' / ' + map.goals.length;
   $('intro-status').classList.toggle('success', solved);
   $('intro-next').hidden = !solved || active === levels.length - 1;
-  $('intro-next').textContent = active + 1 === chapters[1].start ? '进入下一章 →' : '下一关 →';
+  $('intro-next').textContent = active + 1 === chapters[chapterIndex + 1]?.start ? '进入下一章 →' : '下一关 →';
   $('intro-undo').disabled = history.length === 0;
   $('intro-redo').disabled = future.length === 0;
   $('intro-reset').disabled = state === map.initial;
@@ -133,7 +135,7 @@ function addPiece(cell, name) {
 }
 
 function roomColor(roomId) {
-  return map.rooms[roomId].color ?? (roomId === 0 ? (chapterIndex === 1 ? '#a4bedf' : '#cbcbce') : '#79aedc');
+  return map.rooms[roomId].color ?? (roomId === 0 ? chapters[chapterIndex].color : '#79aedc');
 }
 
 function drawRoomMap(canvas, roomId, size = 10) {
@@ -151,10 +153,13 @@ function drawRoomMap(canvas, roomId, size = 10) {
   for (const [id, x, y] of [...map.goals, map.finish]) {
     if (id === roomId) context.strokeRect(x * size + 2, y * size + 2, size - 4, size - 4);
   }
+  const emptyChapter = board.classList.contains('empty-chapter');
+  const playerColor = emptyChapter ? '#db562f' : '#df328d';
+  const crateColor = emptyChapter ? '#add444' : board.classList.contains('blue-crates') ? '#38bce8' : '#ffb63a';
   for (const [index, [id, x, y]] of state.positions.entries()) {
     if (id !== roomId) continue;
     const child = map.inside[index];
-    context.fillStyle = index === 0 ? '#df328d' : child >= 0 ? roomColor(child) : board.classList.contains('blue-crates') ? '#38bce8' : '#ffb63a';
+    context.fillStyle = index === 0 ? playerColor : child >= 0 ? roomColor(child) : crateColor;
     context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
   }
 }
@@ -283,11 +288,12 @@ function openLevel(index) {
   clearRoomMotion(previewBoard);
   active = index;
   const level = levels[index];
-  const nextChapter = index < chapters[1].start ? 0 : 1;
+  const nextChapter = chapters.findLastIndex(chapter => index >= chapter.start);
   if (nextChapter !== chapterIndex) {
     const chapter = chapters[nextChapter];
     chapterIndex = nextChapter;
     $('intro-chapter-title').textContent = chapter.title;
+    document.title = '套箱模式 · ' + chapter.title;
     $('intro-chapter').value = String(nextChapter);
     levelButtons = chapter.levels.map((entry, number) => {
       const button = document.createElement('button');
@@ -311,6 +317,8 @@ function openLevel(index) {
   const blueCrates = chapterIndex === 1 && level.crateColor !== 'gold';
   board.classList.toggle('blue-crates', blueCrates);
   previewBoard.classList.toggle('blue-crates', blueCrates);
+  board.classList.toggle('empty-chapter', chapterIndex === 2);
+  previewBoard.classList.toggle('empty-chapter', chapterIndex === 2);
   board.replaceChildren();
   previewBoard.replaceChildren();
   saveProgress();
