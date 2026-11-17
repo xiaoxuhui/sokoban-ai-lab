@@ -44,6 +44,8 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const zoomCanvas = $('intro-recursive-view');
 const zoomButton = $('intro-zoom');
 const shellInset = 0.84;
+const targetColor = '#f5e4bb';
+const finishColor = '#fff2d9';
 let levelButtons = [];
 let chapterIndex = -1;
 const storageKey = 'sokoban-lab-box-intro-v1';
@@ -244,6 +246,21 @@ function floorColor(roomId) {
   return map.eat ? 'color-mix(in srgb, #241b2c 67%, ' + roomColor(roomId) + ')' : '#535257';
 }
 
+function drawTargetOutline(context, left, top, size, color = targetColor) {
+  context.strokeStyle = color;
+  context.lineWidth = Math.max(1, size * .085);
+  context.strokeRect(left + size * .10, top + size * .10, size * .80, size * .80);
+}
+
+function drawRoomEyes(context, left, top, size, color) {
+  context.fillStyle = color;
+  for (const x of [.29, .71]) {
+    context.beginPath();
+    context.arc(left + x * size, top + .5 * size, size * .063, 0, Math.PI * 2);
+    context.fill();
+  }
+}
+
 function drawRoomMap(canvas, roomId, size = 10) {
   const room = map.rooms[roomId];
   const pieces = [];
@@ -263,10 +280,6 @@ function drawRoomMap(canvas, roomId, size = 10) {
   for (let i = 0; i < room.tiles.length; i++) {
     if (room.tiles[i] === '#') context.fillRect(i % room.width * size, Math.floor(i / room.width) * size, size, size);
   }
-  context.strokeStyle = '#f5e4bb';
-  for (const [id, x, y] of [...map.goals, map.finish]) {
-    if (id === roomId) context.strokeRect(x * size + 2, y * size + 2, size - 4, size - 4);
-  }
   const emptyChapter = board.classList.contains('empty-chapter');
   const playerColor = board.classList.contains('reference-chapter') ? '#c53d3a' :
     map.eat ? '#d260bd' : emptyChapter ? '#db562f' : '#df328d';
@@ -275,10 +288,18 @@ function drawRoomMap(canvas, roomId, size = 10) {
     const child = map.inside[index];
     context.fillStyle = index === 0 ? playerColor : child >= 0 ? roomColor(child) : crateColor;
     context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
-    if (index === 0) {
-      context.fillStyle = '#651914';
-      context.fillRect((x + .27) * size, (y + .46) * size, .12 * size, .12 * size);
-      context.fillRect((x + .61) * size, (y + .46) * size, .12 * size, .12 * size);
+    if (index === 0) drawRoomEyes(context, x * size, y * size, size, '#651914');
+  }
+  for (const [id, x, y] of map.goals) {
+    if (id === roomId) drawTargetOutline(context, x * size, y * size, size);
+  }
+  const [finishRoom, finishX, finishY] = map.finish;
+  if (finishRoom === roomId) {
+    const left = finishX * size;
+    const top = finishY * size;
+    drawTargetOutline(context, left, top, size, finishColor);
+    if (!pieces.some(([entity, x, y]) => entity === 0 && x === finishX && y === finishY)) {
+      drawRoomEyes(context, left, top, size, finishColor);
     }
   }
 }
@@ -436,6 +457,11 @@ function paintRecursiveZoom(time) {
   const progress = recursiveProgress(zoom, time, interval);
   const size = zoomAtProgress(cover, cover / scale, progress);
   zoom.layers = [];
+  const [finishRoom, finishX, finishY] = map.finish;
+  const finishCovered = zoom.children[finishRoom].some(child => child.x === finishX && child.y === finishY);
+  const markerSize = 16;
+  let visibleFinish = false;
+  let projectedFinish;
 
   function paintRoom(roomId, cx, cy, size, container) {
     const room = map.rooms[roomId];
@@ -447,6 +473,15 @@ function paintRecursiveZoom(time) {
     if (left >= width || top >= height || left + w <= 0 || top + h <= 0) return;
     context.drawImage(zoom.artwork[roomId], left, top, w, h);
     zoom.layers.push({ roomId, container, left, top, right: left + w, bottom: top + h });
+    if (roomId === finishRoom) {
+      const x = left + (finishX + .5) * cell;
+      const y = top + (finishY + .5) * cell;
+      if (x >= 0 && x <= width && y >= 0 && y <= height) {
+        if (!finishCovered && cell >= markerSize && x >= cell * .4 && x <= width - cell * .4 &&
+            y >= cell * .4 && y <= height - cell * .4) visibleFinish = true;
+        if (!projectedFinish || projectedFinish.cell < cell) projectedFinish = { x, y, cell };
+      }
+    }
     const nextSize = cell * shellInset;
     if (nextSize < 4) return;
     for (const child of zoom.children[roomId]) {
@@ -456,6 +491,14 @@ function paintRecursiveZoom(time) {
   }
 
   paintRoom(root, width / 2 - x * size, height / 2 - y * size, size, null);
+  if (!visibleFinish && projectedFinish) {
+    const left = Math.max(0, Math.min(width - markerSize, projectedFinish.x - markerSize / 2));
+    const top = Math.max(0, Math.min(height - markerSize, projectedFinish.y - markerSize / 2));
+    context.fillStyle = '#242331';
+    context.fillRect(left, top, markerSize, markerSize);
+    drawTargetOutline(context, left, top, markerSize, finishColor);
+    drawRoomEyes(context, left, top, markerSize, finishColor);
+  }
   zoom.frame = requestAnimationFrame(paintRecursiveZoom);
 }
 
