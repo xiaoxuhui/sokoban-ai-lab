@@ -84,6 +84,7 @@ let viewHeight = board.clientHeight;
 let visibleArea = '';
 let cells = new Map();
 let portalArrowLayout = null;
+let routeInput;
 
 const tileName = { '#': '墙', ' ': '地板', '.': '目标', '$': '箱子', '@': '玩家', '*': '目标上的箱子', '+': '目标上的玩家' };
 const sideNames = ['上边', '右边', '下边', '左边'];
@@ -480,6 +481,7 @@ function watchNote(state, solved) {
 }
 
 function setMode(next) {
+  routeInput?.pause();
   if (next === 'play' && validate(map)) {
     $('map-note').textContent = validate(map);
     return;
@@ -553,6 +555,7 @@ function loadBoard(recenter) {
   mode = 'edit';
   $('chain-push').checked = level.chainPush;
   if (recenter) centerMap();
+  routeInput?.reset();
   renderMap();
   renderTraining();
 }
@@ -995,6 +998,7 @@ function undoMove() {
 }
 $('undo').addEventListener('click', undoMove);
 function resetPlay() {
+  routeInput?.pause();
   manual = map.initial;
   undo = [];
   manualPath = [];
@@ -1003,6 +1007,26 @@ function resetPlay() {
 }
 
 $('reset-play').addEventListener('click', resetPlay);
+
+routeInput = RouteInput.mount($('route-input'), {
+  devices: () => Boolean(manual.devices),
+  state: () => manual,
+  available: () => mode === 'play' && !dialog.open,
+  won: () => won(map, manual),
+  prepare() {
+    const problem = validate(map);
+    if (problem) return problem;
+    setMode('play');
+  },
+  execute(input) {
+    if (manual.devices) {
+      const result = activateDevice(map, manual, input);
+      if (result.state !== manual) commitManualAction(result.state, input);
+      return result.message || '该坐标没有可激活的电源或拉推头。';
+    }
+    move(input);
+  },
+});
 
 function getTrainer() {
   if (trainer) return trainer;

@@ -61,6 +61,7 @@ let textView = false;
 let inspectedRoom = null;
 let roomMotion;
 let recursiveZoom;
+let routeInput;
 
 try {
   const saved = JSON.parse(localStorage.getItem(storageKey));
@@ -606,6 +607,7 @@ function renderRoom(container, roomId) {
 }
 
 function openLevel(index) {
+  routeInput?.reset();
   clearRoomMotion();
   if (recursiveZoom) cancelAnimationFrame(recursiveZoom.frame);
   inspectedRoom = null;
@@ -754,7 +756,7 @@ $('intro-next').addEventListener('click', () => {
   if (won(map, state) && active + 1 < levels.length) openLevel(active + 1);
 });
 document.addEventListener('keydown', event => {
-  if (event.target.closest('select') || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
+  if (event.target.closest('input, textarea, select') || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
   const key = event.key.toLowerCase();
   if (key === 'escape' && inspectedRoom !== null) {
     event.preventDefault();
@@ -773,3 +775,11 @@ document.addEventListener('keydown', event => {
 });
 
 openLevel(active);
+routeInput = RouteInput.mount($('route-input'), {
+  devices: () => false,
+  state: () => state,
+  available: () => inspectedRoom === null,
+  won: () => won(map, state),
+  prepare: returnToPlayer,
+  execute: move,
+});

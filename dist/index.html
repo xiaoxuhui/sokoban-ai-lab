@@ -6,9 +6,10 @@
   <meta name="description" content="绘制自定义地图，手动试玩，观察 AI 通过强化学习掌握推箱子。">
   <meta name="theme-color" content="#111715">
   <title>推箱子实验室</title>
-  <link rel="stylesheet" href="style.css?v=47">
+  <link rel="stylesheet" href="style.css?v=48">
   <script src="engine.js?v=43" defer></script>
-  <script src="app.js?v=47" defer></script>
+  <script src="route-input.js?v=1" defer></script>
+  <script src="app.js?v=48" defer></script>
 </head>
 <body>
   <header class="top">
@@ -120,6 +121,7 @@
           <button class="plain" id="center-map" type="button">回到起点</button>
         </div>
 
+        <details id="route-input" class="route-input"></details>
         <div class="map-footer">
           <div class="map-note" id="map-note" role="status"></div>
           <div class="tools-group record-tools" id="record-tools" hidden>
