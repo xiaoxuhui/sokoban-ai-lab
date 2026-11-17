@@ -18,13 +18,17 @@ const opening = [
     finish: [2, 2],
   },
 ];
-const introLevels = [...opening, ...BoxCampaign.intro];
 const chapters = [
-  { title: '入门', start: 0, levels: introLevels, color: '#cbcbce' },
-  { title: '进入', start: introLevels.length, levels: BoxCampaign.enter, color: '#a4bedf' },
-  { title: '空白', start: introLevels.length + BoxCampaign.enter.length, levels: BoxCampaign.empty, color: '#b7a8a6' },
+  { title: '入门', levels: [...opening, ...BoxCampaign.intro], color: '#cbcbce' },
+  { title: '进入', levels: BoxCampaign.enter, color: '#a4bedf' },
+  { title: '空白', levels: BoxCampaign.empty, color: '#b7a8a6', theme: 'empty' },
+  { title: '吞食', levels: BoxCampaign.eat, color: '#ffa778', theme: 'eat' },
 ];
-const levels = chapters.flatMap(chapter => chapter.levels);
+const levels = [];
+for (const chapter of chapters) {
+  chapter.start = levels.length;
+  levels.push(...chapter.levels);
+}
 
 const $ = id => document.getElementById(id);
 const board = $('intro-board');
@@ -138,12 +142,16 @@ function roomColor(roomId) {
   return map.rooms[roomId].color ?? (roomId === 0 ? chapters[chapterIndex].color : '#79aedc');
 }
 
+function floorColor(roomId) {
+  return map.eat ? 'color-mix(in srgb, #241b2c 67%, ' + roomColor(roomId) + ')' : '#535257';
+}
+
 function drawRoomMap(canvas, roomId, size = 10) {
   const room = map.rooms[roomId];
   canvas.width = room.width * size;
   canvas.height = room.height * size;
   const context = canvas.getContext('2d');
-  context.fillStyle = '#535257';
+  context.fillStyle = floorColor(roomId);
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = roomColor(roomId);
   for (let i = 0; i < room.tiles.length; i++) {
@@ -154,8 +162,8 @@ function drawRoomMap(canvas, roomId, size = 10) {
     if (id === roomId) context.strokeRect(x * size + 2, y * size + 2, size - 4, size - 4);
   }
   const emptyChapter = board.classList.contains('empty-chapter');
-  const playerColor = emptyChapter ? '#db562f' : '#df328d';
-  const crateColor = emptyChapter ? '#add444' : board.classList.contains('blue-crates') ? '#38bce8' : '#ffb63a';
+  const playerColor = map.eat ? '#d260bd' : emptyChapter ? '#db562f' : '#df328d';
+  const crateColor = map.eat ? '#ffdc72' : emptyChapter ? '#add444' : board.classList.contains('blue-crates') ? '#38bce8' : '#ffb63a';
   for (const [index, [id, x, y]] of state.positions.entries()) {
     if (id !== roomId) continue;
     const child = map.inside[index];
@@ -243,6 +251,7 @@ function renderRoom(container, roomId) {
     container.style.setProperty('--columns', room.width);
     container.style.setProperty('--longest-side', Math.max(room.width, room.height));
     container.style.setProperty('--room-color', roomColor(roomId));
+    container.style.setProperty('--room-floor', floorColor(roomId));
     container.replaceChildren(...Array.from(room.tiles, tile => {
       const cell = document.createElement('div');
       cell.className = tile === '#' ? 'cell wall' : 'cell';
@@ -308,17 +317,19 @@ function openLevel(index) {
     });
     $('intro-levels').replaceChildren(...levelButtons);
   }
-  map = compile(level);
+  const theme = chapters[nextChapter].theme;
+  map = compile({ ...level, eat: theme === 'eat' });
   state = map.initial;
   history = [];
   future = [];
   $('intro-title').textContent = '第 ' + (active - chapters[chapterIndex].start + 1) + ' 关 · ' + level.title;
   $('intro-hint').textContent = level.hint;
   const blueCrates = chapterIndex === 1 && level.crateColor !== 'gold';
-  board.classList.toggle('blue-crates', blueCrates);
-  previewBoard.classList.toggle('blue-crates', blueCrates);
-  board.classList.toggle('empty-chapter', chapterIndex === 2);
-  previewBoard.classList.toggle('empty-chapter', chapterIndex === 2);
+  for (const container of [board, previewBoard]) {
+    container.classList.toggle('blue-crates', blueCrates);
+    container.classList.toggle('empty-chapter', theme === 'empty');
+    container.classList.toggle('eat-chapter', theme === 'eat');
+  }
   board.replaceChildren();
   previewBoard.replaceChildren();
   saveProgress();
