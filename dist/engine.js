@@ -561,14 +561,13 @@
         if (!exit || exit.cell === cargo || exit.cell === state.player) continue;
         const landing = exit.cell;
         if (projected.has(landing)) {
-          // Relay the push first. Local boxes stay put for this input.
-          const relay = moved.size ? tracePortalExit(map, state.portalCells, entrance, {
-            occupied, player: state.player, visited,
-          }) : exit;
-          if (relay && occupied.has(relay.cell)) {
-            tryFrom(relay.cell, relay.direction, relay.pairs);
-          }
-          continue;
+          // Reserve the local moves while the outgoing cargo pushes at the exit.
+          // Commit both sides only after the exit has room for the cargo.
+          const projectedState = { ...state, boxes, portalCells };
+          const relayed = pushThroughPortal(map, projectedState, new Set(boxes), landing, exit.direction, exit.pairs);
+          if (relayed === projectedState || relayed.boxes.includes(landing)) continue;
+          boxes.splice(0, boxes.length, ...relayed.boxes);
+          portalCells = relayed.portalCells;
         }
         boxes.push(landing);
         // The projected locations may already be indexed by the exit search.
