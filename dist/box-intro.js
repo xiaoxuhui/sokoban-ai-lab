@@ -248,7 +248,7 @@ function floorColor(roomId) {
 
 function drawTargetOutline(context, left, top, size, color = targetColor) {
   context.strokeStyle = color;
-  context.lineWidth = Math.max(1, size * .085);
+  context.lineWidth = size * .085;
   context.strokeRect(left + size * .10, top + size * .10, size * .80, size * .80);
 }
 
@@ -261,7 +261,12 @@ function drawRoomEyes(context, left, top, size, color) {
   }
 }
 
-function drawRoomMap(canvas, roomId, size = 10) {
+function drawFinish(context, left, top, size, playerOnFinish) {
+  drawTargetOutline(context, left, top, size, finishColor);
+  if (!playerOnFinish) drawRoomEyes(context, left, top, size, finishColor);
+}
+
+function drawRoomMap(canvas, roomId, size = 10, showFinish = true) {
   const room = map.rooms[roomId];
   const pieces = [];
   for (const [index, [id, x, y]] of state.positions.entries()) {
@@ -269,8 +274,9 @@ function drawRoomMap(canvas, roomId, size = 10) {
   }
   const signature = pieces.join('|');
   const cached = roomMaps.get(canvas);
-  if (cached?.map === map && cached.roomId === roomId && cached.size === size && cached.signature === signature) return;
-  roomMaps.set(canvas, { map, roomId, size, signature });
+  if (cached?.map === map && cached.roomId === roomId && cached.size === size &&
+      cached.showFinish === showFinish && cached.signature === signature) return;
+  roomMaps.set(canvas, { map, roomId, size, showFinish, signature });
   canvas.width = room.width * size;
   canvas.height = room.height * size;
   const context = canvas.getContext('2d');
@@ -294,13 +300,9 @@ function drawRoomMap(canvas, roomId, size = 10) {
     if (id === roomId) drawTargetOutline(context, x * size, y * size, size);
   }
   const [finishRoom, finishX, finishY] = map.finish;
-  if (finishRoom === roomId) {
-    const left = finishX * size;
-    const top = finishY * size;
-    drawTargetOutline(context, left, top, size, finishColor);
-    if (!pieces.some(([entity, x, y]) => entity === 0 && x === finishX && y === finishY)) {
-      drawRoomEyes(context, left, top, size, finishColor);
-    }
+  if (showFinish && finishRoom === roomId) {
+    const playerOnFinish = pieces.some(([entity, x, y]) => entity === 0 && x === finishX && y === finishY);
+    drawFinish(context, finishX * size, finishY * size, size, playerOnFinish);
   }
 }
 
@@ -419,7 +421,7 @@ function updateRecursiveZoom(viewedRoom) {
   }
   // The point stays fixed when a full cycle maps the root into its next copy.
   zoom.cycle = { root, scale, x: x / (1 - scale), y: y / (1 - scale) };
-  zoom.artwork.forEach((canvas, room) => drawRoomMap(canvas, room, 28));
+  zoom.artwork.forEach((canvas, room) => drawRoomMap(canvas, room, 28, false));
   if (!zoom.frame) paintRecursiveZoom(performance.now());
 }
 
@@ -458,10 +460,8 @@ function paintRecursiveZoom(time) {
   const size = zoomAtProgress(cover, cover / scale, progress);
   zoom.layers = [];
   const [finishRoom, finishX, finishY] = map.finish;
-  const finishCovered = zoom.children[finishRoom].some(child => child.x === finishX && child.y === finishY);
-  const markerSize = 16;
-  let visibleFinish = false;
-  let projectedFinish;
+  const [playerRoom, playerX, playerY] = state.positions[0];
+  const playerOnFinish = playerRoom === finishRoom && playerX === finishX && playerY === finishY;
 
   function paintRoom(roomId, cx, cy, size, container) {
     const room = map.rooms[roomId];
@@ -473,32 +473,23 @@ function paintRecursiveZoom(time) {
     if (left >= width || top >= height || left + w <= 0 || top + h <= 0) return;
     context.drawImage(zoom.artwork[roomId], left, top, w, h);
     zoom.layers.push({ roomId, container, left, top, right: left + w, bottom: top + h });
-    if (roomId === finishRoom) {
-      const x = left + (finishX + .5) * cell;
-      const y = top + (finishY + .5) * cell;
-      if (x >= 0 && x <= width && y >= 0 && y <= height) {
-        if (!finishCovered && cell >= markerSize && x >= cell * .4 && x <= width - cell * .4 &&
-            y >= cell * .4 && y <= height - cell * .4) visibleFinish = true;
-        if (!projectedFinish || projectedFinish.cell < cell) projectedFinish = { x, y, cell };
+    const nextSize = cell * shellInset;
+    if (nextSize >= 4) {
+      for (const child of zoom.children[roomId]) {
+        paintRoom(child.room, left + (child.x + .5) * cell, top + (child.y + .5) * cell, nextSize,
+          { roomId, owner: child.owner });
       }
     }
-    const nextSize = cell * shellInset;
-    if (nextSize < 4) return;
-    for (const child of zoom.children[roomId]) {
-      paintRoom(child.room, left + (child.x + .5) * cell, top + (child.y + .5) * cell, nextSize,
-        { roomId, owner: child.owner });
+    if (roomId === finishRoom) {
+      const targetLeft = left + finishX * cell;
+      const targetTop = top + finishY * cell;
+      if (targetLeft < width && targetTop < height && targetLeft + cell > 0 && targetTop + cell > 0) {
+        drawFinish(context, targetLeft, targetTop, cell, playerOnFinish);
+      }
     }
   }
 
   paintRoom(root, width / 2 - x * size, height / 2 - y * size, size, null);
-  if (!visibleFinish && projectedFinish) {
-    const left = Math.max(0, Math.min(width - markerSize, projectedFinish.x - markerSize / 2));
-    const top = Math.max(0, Math.min(height - markerSize, projectedFinish.y - markerSize / 2));
-    context.fillStyle = '#242331';
-    context.fillRect(left, top, markerSize, markerSize);
-    drawTargetOutline(context, left, top, markerSize, finishColor);
-    drawRoomEyes(context, left, top, markerSize, finishColor);
-  }
   zoom.frame = requestAnimationFrame(paintRecursiveZoom);
 }
 
