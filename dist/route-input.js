@@ -112,10 +112,6 @@
 
     function schedule() {
       timer = setTimeout(() => {
-        if (document.hidden) {
-          pause();
-          return;
-        }
         advance();
         if (playing) schedule();
       }, Number(speed.value));
@@ -145,7 +141,6 @@
       advance();
       if (playing) schedule();
     });
-    document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
     reset();
     return { reset, pause };
   }

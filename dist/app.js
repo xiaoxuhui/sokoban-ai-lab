@@ -1024,7 +1024,8 @@ routeInput = RouteInput.mount($('route-input'), {
       if (result.state !== manual) commitManualAction(result.state, input);
       return result.message || '该坐标没有可激活的电源或拉推头。';
     }
-    move(input);
+    const next = step(map, manual, input);
+    if (next !== manual) commitManualAction(next, input);
   },
 });
 
