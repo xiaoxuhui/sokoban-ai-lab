@@ -7,10 +7,10 @@
   <meta name="theme-color" content="#111715">
   <title>套箱模式 · 入门</title>
   <link rel="stylesheet" href="style.css?v=47">
-  <link rel="stylesheet" href="box-intro.css?v=6">
-  <script src="box-rooms.js?v=2" defer></script>
+  <link rel="stylesheet" href="box-intro.css?v=7">
+  <script src="box-rooms.js?v=3" defer></script>
   <script src="box-levels.js?v=2" defer></script>
-  <script src="box-intro.js?v=5" defer></script>
+  <script src="box-intro.js?v=6" defer></script>
 </head>
 <body>
   <header class="top">
@@ -37,7 +37,8 @@
         </div>
         <p class="move-count intro-count" id="intro-count"></p>
       </div>
-      <div class="intro-stage" id="intro-stage">
+      <div class="intro-stage intro-scene" id="intro-stage">
+        <canvas class="intro-surround" aria-hidden="true" hidden></canvas>
         <div id="intro-board" class="intro-board" role="group" aria-label="棋盘"></div>
       </div>
       <div class="intro-controls">
@@ -68,7 +69,8 @@
         <button class="outline docs" id="intro-close-inspector" type="button" autofocus>关闭</button>
       </div>
     </div>
-    <div id="intro-preview-stage" class="intro-preview-stage">
+    <div id="intro-preview-stage" class="intro-preview-stage intro-scene">
+      <canvas class="intro-surround" aria-hidden="true" hidden></canvas>
       <div id="intro-preview-board" class="intro-board" role="group" aria-label="房间棋盘"></div>
     </div>
   </dialog>

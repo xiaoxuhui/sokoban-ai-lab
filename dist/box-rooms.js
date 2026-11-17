@@ -62,6 +62,7 @@
     const horizontal = dx !== 0;
     const positions = state.positions.slice();
     const moving = new Set();
+    const crossings = [];
 
     function insideOwnBox(entity, roomId) {
       const ownRoom = map.inside[entity];
@@ -96,6 +97,7 @@
         }
         if (room.owner < 0 || room.owner === entity || exited.has(roomId)) return false;
         exited.add(roomId);
+        if (entity === 0) crossings.push({ direction: 'out', owner: room.owner });
         offset = horizontal ? (y + offset) / room.height : (x + offset) / room.width;
         [roomId, x, y] = positions[room.owner];
       }
@@ -109,6 +111,7 @@
         const childId = map.inside[occupant];
         if (occupant === entity || childId < 0 || entered.has(occupant)) return false;
         entered.add(occupant);
+        if (entity === 0) crossings.push({ direction: 'in', owner: occupant });
         const child = map.rooms[childId];
         const scaled = offset * (horizontal ? child.height : child.width);
         const lane = Math.floor(scaled);
@@ -121,7 +124,7 @@
 
     if (!moveEntity(0, positions[0], 0.5)) return state;
     const pushed = positions.some((position, index) => index > 0 && position !== state.positions[index]);
-    return { positions, moves: state.moves + 1, pushes: state.pushes + Number(pushed) };
+    return { positions, moves: state.moves + 1, pushes: state.pushes + Number(pushed), crossings };
   }
 
   const api = { compile, placed, step, won };

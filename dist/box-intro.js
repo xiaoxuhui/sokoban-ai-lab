@@ -31,6 +31,7 @@ const inspector = $('intro-inspector');
 const previewBoard = $('intro-preview-board');
 const previewStage = $('intro-preview-stage');
 const previewParent = $('intro-preview-parent');
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let levelButtons = [];
 let chapterIndex = -1;
 const storageKey = 'sokoban-lab-box-intro-v1';
@@ -68,12 +69,14 @@ function roomLabel(roomId) {
   return depth ? '箱内第 ' + depth + ' 层' : '外层';
 }
 
-function inspectRoom(roomId, allowCurrent = false) {
+function inspectRoom(roomId, crossing) {
+  const viewedRoom = Number((inspector.open ? previewBoard : board).dataset.room);
+  const allowCurrent = crossing.direction === 'in' && roomId === viewedRoom;
   if (!allowCurrent && roomId === state.positions[0][0]) {
     inspector.close();
     return;
   }
-  renderRoom(previewBoard, roomId);
+  renderScene(previewBoard, roomId, inspector.open ? crossing : null);
   $('intro-inspector-title').textContent = roomLabel(roomId);
   const hadParentFocus = document.activeElement === previewParent;
   previewParent.hidden = parentRoom(roomId) < 0;
@@ -84,15 +87,22 @@ function inspectRoom(roomId, allowCurrent = false) {
 function inspectParent() {
   const roomId = inspector.open ? Number(previewBoard.dataset.room) : state.positions[0][0];
   const parent = parentRoom(roomId);
-  if (parent >= 0) inspectRoom(parent);
+  if (parent >= 0) inspectRoom(parent, { direction: 'out', owner: map.rooms[roomId].owner });
   else if (inspector.open) inspector.close();
 }
 
-function render() {
+function render(crossings = []) {
   const [roomId, x, y] = state.positions[0];
   const covered = placed(map, state);
   const solved = won(map, state, covered);
-  renderRoom(board, roomId);
+  const previousRoom = Number(board.dataset.room);
+  let crossing = crossings[0];
+  if (crossing?.direction === 'out') crossing = crossings.findLast(entry => entry.direction === 'out');
+  if (!crossing && board.children.length && previousRoom !== roomId) {
+    const entering = parentRoom(roomId) === previousRoom;
+    crossing = { direction: entering ? 'in' : 'out', owner: map.rooms[entering ? roomId : previousRoom].owner };
+  }
+  renderScene(board, roomId, crossing);
   $('intro-room').hidden = map.rooms.length === 1 && map.rooms[0].owner < 0;
   $('intro-room').textContent = roomLabel(roomId);
   const canLookOut = parentRoom(roomId) >= 0;
@@ -126,13 +136,12 @@ function roomColor(roomId) {
   return map.rooms[roomId].color ?? (roomId === 0 ? (chapterIndex === 1 ? '#a4bedf' : '#cbcbce') : '#79aedc');
 }
 
-function drawMiniature(canvas, roomId) {
+function drawRoomMap(canvas, roomId, size = 10) {
   const room = map.rooms[roomId];
-  const size = 10;
   canvas.width = room.width * size;
   canvas.height = room.height * size;
   const context = canvas.getContext('2d');
-  context.fillStyle = '#303342';
+  context.fillStyle = '#535257';
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = roomColor(roomId);
   for (let i = 0; i < room.tiles.length; i++) {
@@ -148,6 +157,78 @@ function drawMiniature(canvas, roomId) {
     context.fillStyle = index === 0 ? '#df328d' : child >= 0 ? roomColor(child) : board.classList.contains('blue-crates') ? '#38bce8' : '#ffb63a';
     context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
   }
+}
+
+function renderSurround(scene, roomId) {
+  const outside = scene.querySelector('.intro-surround');
+  const parent = state.positions[map.rooms[roomId].owner];
+  scene.style.setProperty('--surround-color', roomColor(parent?.[0] ?? roomId));
+  scene.classList.toggle('with-surround', Boolean(parent));
+  outside.hidden = !parent;
+  if (!parent) return;
+
+  const [parentId, x, y] = parent;
+  const room = map.rooms[parentId];
+  outside.style.setProperty('--outer-columns', room.width);
+  outside.style.setProperty('--outer-rows', room.height);
+  outside.style.setProperty('--outer-x', x + 0.5);
+  outside.style.setProperty('--outer-y', y + 0.5);
+  drawRoomMap(outside, parentId, 32);
+}
+
+function clearRoomMotion(container) {
+  for (const animation of container.getAnimations()) animation.cancel();
+  container.parentElement.querySelector('.intro-ghost')?.remove();
+}
+
+function renderScene(container, roomId, crossing) {
+  const scene = container.parentElement;
+  const animate = crossing && !reduceMotion.matches && container.children.length;
+  const entering = crossing?.direction === 'in';
+  const shell = crossing ? '[data-shell="' + crossing.owner + '"]' : null;
+  let oldRect, oldShell, ghost;
+
+  if (crossing) clearRoomMotion(container);
+  if (animate) {
+    oldRect = container.getBoundingClientRect();
+    oldShell = entering && container.querySelector(shell)?.getBoundingClientRect();
+    ghost = container.cloneNode(true);
+    ghost.removeAttribute('id');
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.inert = true;
+    ghost.classList.add('intro-ghost');
+    const sources = container.querySelectorAll('canvas');
+    ghost.querySelectorAll('canvas').forEach((canvas, index) => canvas.getContext('2d').drawImage(sources[index], 0, 0));
+  }
+
+  renderRoom(container, roomId);
+  renderSurround(scene, roomId);
+  if (!ghost || !oldRect.width) return;
+
+  const area = scene.getBoundingClientRect();
+  const nextRect = container.getBoundingClientRect();
+  const target = entering ? oldShell : container.querySelector(shell)?.getBoundingClientRect();
+  const zoomed = entering ? nextRect : oldRect;
+  const anchor = target || zoomed;
+  const tx = anchor.left + anchor.width / 2 - zoomed.left - zoomed.width / 2;
+  const ty = anchor.top + anchor.height / 2 - zoomed.top - zoomed.height / 2;
+  const scale = target ? Math.min(target.width / zoomed.width, target.height / zoomed.height) : 0.24;
+  const zoom = 'translate(' + tx + 'px, ' + ty + 'px) scale(' + scale + ')';
+  const timing = { duration: 220, easing: 'cubic-bezier(.25,.7,.28,1)' };
+  Object.assign(ghost.style, {
+    left: oldRect.left - area.left - scene.clientLeft + 'px',
+    top: oldRect.top - area.top - scene.clientTop + 'px',
+    width: oldRect.width + 'px',
+    height: oldRect.height + 'px',
+    zIndex: entering ? '0' : '2',
+  });
+  scene.append(ghost);
+  ghost.animate([{ opacity: 1 }, { opacity: 0, transform: entering ? 'scale(1.12)' : zoom }], timing)
+    .onfinish = () => ghost.remove();
+  container.animate([
+    { opacity: entering ? 0.55 : 0.7, transform: entering ? zoom : 'scale(1.1)' },
+    { opacity: 1, transform: 'none' },
+  ], timing);
 }
 
 function renderRoom(container, roomId) {
@@ -183,20 +264,23 @@ function renderRoom(container, roomId) {
       else if (child >= 0) {
         const button = document.createElement('button');
         button.type = 'button';
+        button.dataset.shell = entity;
         button.className = goal ? 'room-box room-on-goal' : 'room-box';
         button.style.setProperty('--box-color', roomColor(child));
         button.setAttribute('aria-label', child === roomId ? '查看小箱子里的同一张棋盘' :
           '查看第 ' + (index % room.width + 1) + ' 列第 ' + (Math.floor(index / room.width) + 1) + ' 行的箱内房间');
         button.append(document.createElement('canvas'));
-        button.addEventListener('click', () => inspectRoom(child, child === roomId));
+        button.addEventListener('click', () => inspectRoom(child, { direction: 'in', owner: entity }));
         cell.append(button);
       } else if (crate) addPiece(cell, goal ? 'crate placed' : 'crate');
     }
-    if (child >= 0) drawMiniature(cell.querySelector('canvas'), child);
+    if (child >= 0) drawRoomMap(cell.querySelector('canvas'), child);
   }
 }
 
 function openLevel(index) {
+  clearRoomMotion(board);
+  clearRoomMotion(previewBoard);
   active = index;
   const level = levels[index];
   const nextChapter = index < chapters[1].start ? 0 : 1;
@@ -247,21 +331,22 @@ function applyState(next) {
     complete[active] = true;
     saveProgress();
   }
-  render();
+  render(next.crossings);
 }
 
 function undo() {
   if (history.length === 0) return;
+  const crossings = (state.crossings ?? []).map(({ direction, owner }) => ({ direction: direction === 'in' ? 'out' : 'in', owner })).reverse();
   future.push(state);
   state = history.pop();
-  render();
+  render(crossings);
 }
 
 function redo() {
   if (future.length === 0) return;
   history.push(state);
   state = future.pop();
-  render();
+  render(state.crossings);
 }
 
 $('intro-chapter').addEventListener('change', event => {
@@ -269,6 +354,9 @@ $('intro-chapter').addEventListener('change', event => {
   event.target.blur();
 });
 $('intro-close-inspector').addEventListener('click', () => inspector.close());
+inspector.addEventListener('close', () => {
+  if (!inspector.open) clearRoomMotion(previewBoard);
+});
 $('intro-view-parent').addEventListener('click', inspectParent);
 previewParent.addEventListener('click', inspectParent);
 stage.addEventListener('click', event => {
