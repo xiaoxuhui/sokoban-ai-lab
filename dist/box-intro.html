@@ -7,11 +7,11 @@
   <meta name="theme-color" content="#111715">
   <title>套箱模式 · 入门</title>
   <link rel="stylesheet" href="style.css?v=47">
-  <link rel="stylesheet" href="box-intro.css?v=12">
+  <link rel="stylesheet" href="box-intro.css?v=13">
   <script src="box-rooms.js?v=5" defer></script>
-  <script src="box-levels.js?v=9" defer></script>
+  <script src="box-levels.js?v=10" defer></script>
   <script src="box-portals.js?v=1" defer></script>
-  <script src="box-intro.js?v=13" defer></script>
+  <script src="box-intro.js?v=14" defer></script>
 </head>
 <body>
   <header class="top">
@@ -43,6 +43,7 @@
         <canvas class="intro-surround" aria-hidden="true" hidden></canvas>
         <div id="intro-board" class="intro-board" role="group" aria-label="棋盘"></div>
         <div id="intro-text-maps" class="intro-text-maps" role="group" aria-label="字符棋盘" hidden></div>
+        <canvas class="intro-recursive-view" id="intro-recursive-view" aria-hidden="true" hidden></canvas>
       </div>
       <div class="intro-controls">
         <div class="tools-group">
@@ -50,6 +51,7 @@
           <button class="outline" id="intro-redo" aria-keyshortcuts="X" type="button" disabled>重做 <kbd>X</kbd></button>
           <button class="outline" id="intro-reset" aria-keyshortcuts="R" type="button">重开</button>
           <button class="outline" id="intro-return" aria-keyshortcuts="Escape" type="button" hidden>回到玩家</button>
+          <button class="outline" id="intro-zoom" type="button" hidden>暂停缩放</button>
         </div>
         <div class="dpad" aria-label="移动">
           <button type="button" data-move="3" aria-label="向左">←</button>

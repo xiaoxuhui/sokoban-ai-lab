@@ -41,6 +41,9 @@ const parentButton = $('intro-view-parent');
 const moveButtons = document.querySelectorAll('[data-move]');
 const roomMaps = new WeakMap();
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const zoomCanvas = $('intro-recursive-view');
+const zoomButton = $('intro-zoom');
+const shellInset = 0.84;
 let levelButtons = [];
 let chapterIndex = -1;
 const storageKey = 'sokoban-lab-box-intro-v1';
@@ -55,6 +58,7 @@ let future = [];
 let textView = false;
 let inspectedRoom = null;
 let roomMotion;
+let recursiveZoom;
 
 try {
   const saved = JSON.parse(localStorage.getItem(storageKey));
@@ -147,6 +151,7 @@ function render(crossings = []) {
   const solved = won(map, state, covered);
   renderScene(roomId, cameraCrossing(crossings, Number(board.dataset.room), roomId), showText);
   if (showText) renderTextMaps(playerRoom);
+  updateRecursiveZoom(roomId);
   $('intro-room').hidden = map.rooms.length === 1 && map.rooms[0].owner < 0;
   $('intro-room').textContent = (inspecting ? '正在查看 · ' : '') + roomLabel(roomId);
   const canLookOut = parentRoom(roomId) >= 0;
@@ -270,6 +275,11 @@ function drawRoomMap(canvas, roomId, size = 10) {
     const child = map.inside[index];
     context.fillStyle = index === 0 ? playerColor : child >= 0 ? roomColor(child) : crateColor;
     context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
+    if (index === 0) {
+      context.fillStyle = '#651914';
+      context.fillRect((x + .27) * size, (y + .46) * size, .12 * size, .12 * size);
+      context.fillRect((x + .61) * size, (y + .46) * size, .12 * size, .12 * size);
+    }
   }
 }
 
@@ -325,10 +335,19 @@ function cameraPose(rect, anchor, target) {
 
 const restingPose = { x: 0, y: 0, scale: 1 };
 
+function zoomAtProgress(start, end, progress) {
+  return start * (end / start) ** progress;
+}
+
+function recursiveProgress(zoom, time, interval) {
+  const phase = Math.max(0, time - zoom.started) % interval / interval;
+  return zoom.direction === 'in' ? phase : 1 - phase;
+}
+
 function animateCamera(element, from, to, fromOpacity, toOpacity, duration) {
   const frames = Array.from({ length: 9 }, (_, index) => {
     const progress = index / 8;
-    const scale = from.scale * (to.scale / from.scale) ** progress;
+    const scale = zoomAtProgress(from.scale, to.scale, progress);
     const zoom = to.scale === from.scale ? progress : (scale - from.scale) / (to.scale - from.scale);
     const x = from.x + (to.x - from.x) * zoom;
     const y = from.y + (to.y - from.y) * zoom;
@@ -338,6 +357,106 @@ function animateCamera(element, from, to, fromOpacity, toOpacity, duration) {
     };
   });
   return element.animate(frames, { duration, easing: 'linear', fill: 'backwards' });
+}
+
+function updateRecursiveZoom(viewedRoom) {
+  if (!recursiveZoom) return;
+  const zoom = recursiveZoom;
+  const chain = [];
+  let parent = viewedRoom;
+  while (parent >= 0 && !chain.includes(parent)) {
+    chain.push(parent);
+    parent = parentRoom(parent);
+  }
+  const show = parent >= 0 && zoom.pausedAt === null;
+  zoomCanvas.hidden = !show;
+  zoomButton.textContent = zoom.pausedAt === null ? '暂停缩放' : '继续缩放';
+  if (!show) {
+    cancelAnimationFrame(zoom.frame);
+    zoom.frame = 0;
+    return;
+  }
+
+  const cycle = chain.slice(chain.indexOf(parent)).reverse();
+  const root = Math.min(...cycle);
+  const first = cycle.indexOf(root);
+  zoom.children = map.rooms.map(() => []);
+  state.positions.forEach(([room, x, y], owner) => {
+    const child = map.inside[owner];
+    if (child >= 0) zoom.children[room].push({ x, y, owner, room: child });
+  });
+  let x = 0, y = 0, scale = 1;
+  for (let i = 0; i < cycle.length; i++) {
+    const roomId = cycle[(first + i) % cycle.length];
+    const next = cycle[(first + i + 1) % cycle.length];
+    const room = map.rooms[roomId];
+    const [, tileX, tileY] = state.positions[map.rooms[next].owner];
+    const side = Math.max(room.width, room.height);
+    x += scale * (tileX + .5 - room.width / 2) / side;
+    y += scale * (tileY + .5 - room.height / 2) / side;
+    scale *= shellInset / side;
+  }
+  // The point stays fixed when a full cycle maps the root into its next copy.
+  zoom.cycle = { root, scale, x: x / (1 - scale), y: y / (1 - scale) };
+  zoom.artwork.forEach((canvas, room) => drawRoomMap(canvas, room, 28));
+  if (!zoom.frame) paintRecursiveZoom(performance.now());
+}
+
+function paintRecursiveZoom(time) {
+  const zoom = recursiveZoom;
+  const width = zoomCanvas.clientWidth;
+  const height = zoomCanvas.clientHeight;
+  const ratio = Math.min(devicePixelRatio, 2);
+  const pixelsWide = Math.round(width * ratio);
+  const pixelsHigh = Math.round(height * ratio);
+  if (zoomCanvas.width !== pixelsWide || zoomCanvas.height !== pixelsHigh) {
+    zoomCanvas.width = pixelsWide;
+    zoomCanvas.height = pixelsHigh;
+  }
+  const context = zoomCanvas.getContext('2d');
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  const { root, x, y, scale } = zoom.cycle;
+  const room = map.rooms[root];
+  const side = Math.max(room.width, room.height);
+  const cover = Math.max(
+    (width / 2 + 1) / (room.width / side / 2 - Math.abs(x)),
+    (height / 2 + 1) / (room.height / side / 2 - Math.abs(y)),
+  );
+  const interval = -Math.log(scale) * 950;
+  const previous = zoom.projection;
+  if (previous?.root === root && (previous.interval !== interval || previous.cover !== cover)) {
+    // A moved shell can change the cycle. Retain the current scale in the new cycle.
+    const previousProgress = recursiveProgress(zoom, time, previous.interval);
+    const previousSize = zoomAtProgress(previous.cover, previous.cover / previous.scale, previousProgress);
+    const distance = Math.log(previousSize / cover) * 950;
+    const elapsed = zoom.direction === 'in' ? distance : interval - distance;
+    zoom.started = time - (elapsed % interval + interval) % interval;
+  }
+  zoom.projection = { root, cover, scale, interval };
+  const progress = recursiveProgress(zoom, time, interval);
+  const size = zoomAtProgress(cover, cover / scale, progress);
+  zoom.layers = [];
+
+  function paintRoom(roomId, cx, cy, size, container) {
+    const room = map.rooms[roomId];
+    const cell = size / Math.max(room.width, room.height);
+    const w = room.width * cell;
+    const h = room.height * cell;
+    const left = cx - w / 2;
+    const top = cy - h / 2;
+    if (left >= width || top >= height || left + w <= 0 || top + h <= 0) return;
+    context.drawImage(zoom.artwork[roomId], left, top, w, h);
+    zoom.layers.push({ roomId, container, left, top, right: left + w, bottom: top + h });
+    const nextSize = cell * shellInset;
+    if (nextSize < 4) return;
+    for (const child of zoom.children[roomId]) {
+      paintRoom(child.room, left + (child.x + .5) * cell, top + (child.y + .5) * cell, nextSize,
+        { roomId, owner: child.owner });
+    }
+  }
+
+  paintRoom(root, width / 2 - x * size, height / 2 - y * size, size, null);
+  zoom.frame = requestAnimationFrame(paintRecursiveZoom);
 }
 
 function renderScene(roomId, crossing, showText) {
@@ -454,6 +573,7 @@ function renderRoom(container, roomId) {
 
 function openLevel(index) {
   clearRoomMotion();
+  if (recursiveZoom) cancelAnimationFrame(recursiveZoom.frame);
   inspectedRoom = null;
   active = index;
   const level = levels[index];
@@ -479,6 +599,16 @@ function openLevel(index) {
   }
   const theme = chapters[nextChapter].id;
   map = compile({ ...level, eat: theme === 'eat' || theme === 'reference', allowCycles: theme === 'reference' });
+  const now = performance.now();
+  recursiveZoom = level.recursiveZoom ? {
+    direction: level.recursiveZoom,
+    started: now,
+    pausedAt: reduceMotion.matches ? now : null,
+    frame: 0,
+    artwork: map.rooms.map(() => document.createElement('canvas')),
+  } : undefined;
+  zoomCanvas.hidden = !recursiveZoom;
+  zoomButton.hidden = !recursiveZoom;
   state = map.initial;
   history = [];
   future = [];
@@ -554,6 +684,26 @@ $('intro-chapter').addEventListener('change', event => {
 });
 returnButton.addEventListener('click', returnToPlayer);
 parentButton.addEventListener('click', inspectParent);
+zoomButton.addEventListener('click', () => {
+  const now = performance.now();
+  if (recursiveZoom.pausedAt === null) recursiveZoom.pausedAt = now;
+  else {
+    recursiveZoom.started += now - recursiveZoom.pausedAt;
+    recursiveZoom.pausedAt = null;
+  }
+  updateRecursiveZoom(inspectedRoom ?? state.positions[0][0]);
+});
+zoomCanvas.addEventListener('click', event => {
+  const bounds = zoomCanvas.getBoundingClientRect();
+  const x = event.clientX - bounds.left;
+  const y = event.clientY - bounds.top;
+  const layer = recursiveZoom.layers.findLast(layer => x >= layer.left && x < layer.right &&
+    y >= layer.top && y < layer.bottom);
+  const viewed = inspectedRoom ?? state.positions[0][0];
+  if (layer?.container?.roomId === viewed) {
+    inspectRoom(layer.roomId, { direction: 'in', owner: layer.container.owner });
+  } else if (layer?.roomId !== viewed) inspectParent();
+});
 displayMode.addEventListener('click', () => {
   inspectedRoom = null;
   setTextView(!textView);
