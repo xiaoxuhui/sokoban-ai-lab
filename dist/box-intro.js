@@ -788,6 +788,16 @@ function renderRoom(container, roomId) {
     container.style.setProperty('--longest-side', Math.max(room.width, room.height));
     container.style.setProperty('--room-color', roomColor(roomId));
     container.style.setProperty('--room-floor', floorColor(roomId));
+    // A single bitmap keeps wall runs continuous at fractional zoom and cell sizes.
+    const terrain = document.createElement('canvas');
+    terrain.width = room.width;
+    terrain.height = room.height;
+    const terrainContext = terrain.getContext('2d');
+    terrainContext.fillStyle = roomColor(roomId);
+    for (let cell = 0; cell < room.tiles.length; cell++) {
+      if (room.tiles[cell] === '#') terrainContext.fillRect(cell % room.width, Math.floor(cell / room.width), 1, 1);
+    }
+    container.style.backgroundImage = 'url("' + terrain.toDataURL() + '")';
     container.replaceChildren(...Array.from(room.tiles, tile => {
       const cell = document.createElement('div');
       cell.className = tile === '#' ? 'cell wall' : 'cell';

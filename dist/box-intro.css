@@ -20,8 +20,8 @@
 }
 .intro-stage.can-look-out { cursor: pointer; }
 .intro-stage .intro-board { cursor: default; }
-/* Cover fractional cell edges so the enlarged outer room cannot bleed through. */
-.intro-board { display: grid; grid-template-columns: repeat(var(--columns), minmax(0, 1fr)); width: 100%; max-width: calc(440px * var(--columns) / var(--longest-side)); user-select: none; overflow: hidden; border-radius: 8px; background: var(--room-floor, #535257); }
+/* Paint continuous terrain beneath the grid, including across adjacent wall cells. */
+.intro-board { display: grid; grid-template-columns: repeat(var(--columns), minmax(0, 1fr)); width: 100%; max-width: calc(440px * var(--columns) / var(--longest-side)); user-select: none; overflow: hidden; border-radius: 8px; background-color: var(--room-floor, #535257); background-size: 100% 100%; background-repeat: no-repeat; image-rendering: pixelated; }
 .intro-scene > :is(.intro-board, .intro-surround) { --scene-side: min(100cqw, 100cqh, 440px); }
 .intro-scene.with-surround > :is(.intro-board, .intro-surround) { --scene-side: min(85cqw, 85cqh, 396px); }
 .intro-scene > .intro-board { position: relative; z-index: 1; width: calc(var(--scene-side) * var(--columns) / var(--longest-side)); }
@@ -42,8 +42,8 @@
 .intro-text-room [data-glyph="b"] { color: #ffdc72; }
 .intro-text-room [data-glyph="2"] { color: #8eafff; }
 .intro-text-room :is([data-glyph="_"], [data-glyph="="]) { color: #f7f0e5; }
-.intro-board .cell { aspect-ratio: 1; border: 0; background: var(--room-floor, #535257); }
-.intro-board .cell.wall { border-radius: 0; background: var(--room-color, #cbcbce); box-shadow: none; }
+.intro-board .cell { aspect-ratio: 1; border: 0; background: transparent; }
+.intro-board .cell.wall { border-radius: 0; background: transparent; box-shadow: none; }
 .intro-board .cell > .goal, .intro-board .cell > .intro-player-goal { width: 76%; height: 76%; border: 3px solid #dedbdf; border-radius: 2px; background: transparent; }
 .intro-board .goal::after { content: none; }
 .intro-board .cell:has(> .player, > .intro-player-goal)::before,
