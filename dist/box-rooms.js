@@ -64,6 +64,7 @@
     const positions = state.positions.slice();
     const moving = new Set();
     const crossings = [];
+    const transfers = [];
 
     function insideOwnBox(entity, roomId) {
       const ownRoom = map.inside[entity];
@@ -81,9 +82,11 @@
 
     function moveEntity(entity, offset, heading) {
       if (moving.has(entity)) return false;
+      const transferCount = transfers.length;
       moving.add(entity);
       const success = advance(entity, positions[entity], offset, heading);
       moving.delete(entity);
+      if (!success) transfers.length = transferCount;
       return success;
     }
 
@@ -101,6 +104,7 @@
         if (room.owner < 0 || room.owner === entity || exited.has(roomId)) return false;
         exited.add(roomId);
         if (entity === 0) crossings.push({ direction: 'out', owner: room.owner });
+        else transfers.push({ entity, direction: 'out', room: roomId, owner: room.owner, host: positions[room.owner] });
         offset = horizontal ? (y + offset) / room.height : (x + offset) / room.width;
         [roomId, x, y] = positions[room.owner];
       }
@@ -116,11 +120,14 @@
       const scaled = offset * (horizontal ? child.height : child.width);
       const lane = Math.floor(scaled);
       const crossingsBefore = crossings.length;
+      const transfersBefore = transfers.length;
       if (entity === 0) crossings.push({ direction: 'in', owner });
+      else transfers.push({ entity, direction: 'in', room: childId, owner, host: positions[owner] });
       const moved = land(entity, childId, horizontal ? (dx > 0 ? 0 : child.width - 1) : lane,
         horizontal ? lane : (dy > 0 ? 0 : child.height - 1), scaled - lane, heading, entered);
       entered.delete(owner);
       if (!moved) crossings.length = crossingsBefore;
+      if (!moved) transfers.length = transfersBefore;
       return moved;
     }
 
@@ -143,7 +150,7 @@
 
     if (!moveEntity(0, 0.5, direction)) return state;
     const pushed = positions.some((position, index) => index > 0 && position !== state.positions[index]);
-    return { positions, moves: state.moves + 1, pushes: state.pushes + Number(pushed), crossings };
+    return { positions, moves: state.moves + 1, pushes: state.pushes + Number(pushed), crossings, transfers };
   }
 
   const api = { compile, placed, step, won };

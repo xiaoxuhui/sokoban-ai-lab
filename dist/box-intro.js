@@ -44,6 +44,8 @@ const roomMaps = new WeakMap();
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const zoomCanvas = $('intro-recursive-view');
 const zoomButton = $('intro-zoom');
+const boxCanvas = $('intro-box-motion');
+const hiddenBoxes = new Set();
 const shellInset = 0.84;
 const targetColor = '#f5e4bb';
 const finishColor = '#fff2d9';
@@ -63,6 +65,7 @@ let inspectedRoom = null;
 let roomMotion;
 let recursiveZoom;
 let routeInput;
+let boxMotion;
 
 try {
   const saved = JSON.parse(localStorage.getItem(storageKey));
@@ -114,6 +117,7 @@ function roomLabel(roomId) {
 }
 
 function inspectRoom(roomId, crossing) {
+  clearBoxMotion();
   inspectedRoom = roomId === state.positions[0][0] ? null : roomId;
   render(crossing ? [crossing] : []);
 }
@@ -193,6 +197,7 @@ function roomColor(roomId) {
 }
 
 function setTextView(enabled) {
+  clearBoxMotion();
   clearRoomMotion();
   textView = enabled;
   displayMode.textContent = enabled ? '图形显示' : '字符显示';
@@ -272,7 +277,7 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true) {
   const room = map.rooms[roomId];
   const pieces = [];
   for (const [index, [id, x, y]] of state.positions.entries()) {
-    if (id === roomId) pieces.push([index, x, y]);
+    if (id === roomId && !hiddenBoxes.has(index)) pieces.push([index, x, y]);
   }
   const signature = pieces.join('|');
   const cached = roomMaps.get(canvas);
@@ -382,6 +387,211 @@ function animateCamera(element, from, to, fromOpacity, toOpacity, duration) {
     };
   });
   return element.animate(frames, { duration, easing: 'linear', fill: 'backwards' });
+}
+
+function tileFrame(frame, roomId, x, y) {
+  const room = map.rooms[roomId];
+  const width = frame.width / room.width;
+  const height = frame.height / room.height;
+  return { left: frame.left + x * width, top: frame.top + y * height, width, height };
+}
+
+function childFrame(frame, childId, host, inset = shellInset) {
+  const tile = tileFrame(frame, host[0], host[1], host[2]);
+  const room = map.rooms[childId];
+  const size = Math.min(tile.width, tile.height) * inset / Math.max(room.width, room.height);
+  return {
+    left: tile.left + tile.width / 2 - room.width * size / 2,
+    top: tile.top + tile.height / 2 - room.height * size / 2,
+    width: room.width * size, height: room.height * size,
+  };
+}
+
+function parentFrame(frame, host, inset = shellInset) {
+  const size = Math.max(frame.width, frame.height) / inset;
+  const room = map.rooms[host[0]];
+  return {
+    left: frame.left + frame.width / 2 - (host[1] + .5) * size,
+    top: frame.top + frame.height / 2 - (host[2] + .5) * size,
+    width: room.width * size, height: room.height * size,
+  };
+}
+
+function visibleRoomFrame(roomId, positions, seen = new Set()) {
+  const viewRoom = Number(board.dataset.room);
+  if (roomId === viewRoom) return board.getBoundingClientRect();
+  const owner = map.rooms[viewRoom].owner;
+  const outside = stage.querySelector('.intro-surround');
+  if (owner >= 0 && positions[owner][0] === roomId && !outside.hidden) return outside.getBoundingClientRect();
+  if (seen.has(roomId)) return null;
+  seen.add(roomId);
+  const host = positions[map.rooms[roomId].owner];
+  if (!host) return null;
+  const frame = visibleRoomFrame(host[0], positions, seen);
+  return frame ? childFrame(frame, roomId, host) : null;
+}
+
+function sourceBoxFrame(position, positions, route = [], destination = null) {
+  if (destination?.[0] === Number(board.dataset.room) && position[0] !== destination[0] && route.length) {
+    let frame = zoomCanvas.hidden ? board.getBoundingClientRect() : sourceBoxFrame(destination, positions);
+    if (!frame) return null;
+    for (const [index, transfer] of route.slice().reverse().entries()) {
+      const inverse = { ...transfer, direction: transfer.direction === 'in' ? 'out' : 'in' };
+      const inset = index === 0 && inverse.direction === 'out' && zoomCanvas.hidden ? 1 : shellInset;
+      frame = transferFrame(frame, inverse, positions, inset);
+    }
+    return frame;
+  }
+  if (!zoomCanvas.hidden && recursiveZoom?.layers) {
+    const area = zoomCanvas.getBoundingClientRect();
+    const candidates = recursiveZoom.layers.filter(layer => layer.roomId === position[0]).map(layer => ({
+      left: area.left + layer.left, top: area.top + layer.top,
+      width: layer.right - layer.left, height: layer.bottom - layer.top,
+    }));
+    return candidates.filter(frame => {
+      const tile = tileFrame(frame, ...position);
+      return tile.left < area.right && tile.top < area.bottom &&
+        tile.left + tile.width > area.left && tile.top + tile.height > area.top;
+    }).sort((a, b) => b.width - a.width)[0] ?? null;
+  }
+  return visibleRoomFrame(position[0], positions);
+}
+
+function transferFrame(frame, transfer, positions, inset) {
+  const currentHost = positions[transfer.owner];
+  const host = currentHost[0] === transfer.host[0] ? currentHost : transfer.host;
+  return transfer.direction === 'in' ? childFrame(frame, transfer.room, host, inset) :
+    parentFrame(frame, host, inset);
+}
+
+function boxSprite(entity) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 192;
+  const context = canvas.getContext('2d');
+  const child = map.inside[entity];
+  const edge = canvas.width * .065;
+  const side = canvas.width - edge * 2;
+  context.fillStyle = child >= 0 ? roomColor(child) :
+    board.classList.contains('blue-crates') ? '#38bce8' :
+    board.classList.contains('empty-chapter') ? '#add444' :
+    board.classList.contains('eat-chapter') ? '#ffdc72' : '#ffb63a';
+  context.fillRect(edge, edge, side, side);
+  context.strokeStyle = child >= 0 ? '#d2e1fa' : '#ffedaf';
+  context.lineWidth = 3;
+  context.strokeRect(edge, edge, side, side);
+  if (child >= 0) {
+    const preview = document.createElement('canvas');
+    drawRoomMap(preview, child, 12);
+    const scale = (side - 12) / Math.max(preview.width, preview.height);
+    const width = preview.width * scale;
+    const height = preview.height * scale;
+    context.drawImage(preview, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+  }
+  return canvas;
+}
+
+function clearBoxMotion() {
+  if (boxMotion) {
+    cancelAnimationFrame(boxMotion.frame);
+    for (const cell of board.querySelectorAll('.cell')) cell.style.removeProperty('--box-visibility');
+  }
+  boxMotion = undefined;
+  hiddenBoxes.clear();
+  boxCanvas.hidden = true;
+}
+
+function prepareBoxMotion(next, transfers, crossings = []) {
+  const sprites = [];
+  const now = performance.now();
+  if (!reduceMotion.matches && !textView && inspectedRoom === null &&
+      state.positions[0][0] === next.positions[0][0] && !crossings.length) {
+    const groups = new Map();
+    for (const transfer of transfers) {
+      if (!groups.has(transfer.entity)) groups.set(transfer.entity, []);
+      groups.get(transfer.entity).push(transfer);
+    }
+    for (const sprite of boxMotion?.sprites ?? []) {
+      if (!groups.has(sprite.entity) && now < sprite.started + sprite.duration &&
+          sprite.nextPositions[sprite.entity].every((value, index) => value === next.positions[sprite.entity][index])) {
+        sprites.push({ ...sprite, nextPositions: next.positions });
+      }
+    }
+    for (const [entity, route] of groups) {
+      const position = state.positions[entity];
+      const frame = sourceBoxFrame(position, state.positions, route, next.positions[entity]);
+      if (!frame) continue;
+      const old = boxMotion?.sprites.find(sprite => sprite.entity === entity);
+      sprites.push({
+        entity, route, position, positions: state.positions, nextPositions: next.positions,
+        from: old?.current ?? tileFrame(frame, ...position), canvas: boxSprite(entity),
+        started: now, duration: 220,
+      });
+    }
+  }
+  clearBoxMotion();
+  if (!sprites.length) return null;
+  for (const sprite of sprites) hiddenBoxes.add(sprite.entity);
+  return { sprites, frame: 0 };
+}
+
+function paintBoxMotion(time) {
+  const motion = boxMotion;
+  if (!motion) return;
+  const area = boxCanvas.getBoundingClientRect();
+  const ratio = Math.min(devicePixelRatio, 2);
+  const width = Math.round(area.width * ratio), height = Math.round(area.height * ratio);
+  if (boxCanvas.width !== width || boxCanvas.height !== height) {
+    boxCanvas.width = width;
+    boxCanvas.height = height;
+  }
+  const context = boxCanvas.getContext('2d');
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, area.width, area.height);
+  const active = [];
+  for (const sprite of motion.sprites) {
+    const progress = Math.max(0, Math.min(1, (time - sprite.started) / sprite.duration));
+    let frame = sourceBoxFrame(sprite.position, sprite.positions, sprite.route, sprite.nextPositions[sprite.entity]);
+    if (!frame) continue;
+    for (const [index, transfer] of sprite.route.entries()) {
+      const inset = index === 0 && transfer.direction === 'out' && zoomCanvas.hidden &&
+        transfer.room === Number(board.dataset.room) ? 1 : shellInset;
+      frame = transferFrame(frame, transfer, sprite.nextPositions, inset);
+    }
+    const position = sprite.nextPositions[sprite.entity];
+    if (position[0] === Number(board.dataset.room) && position[0] !== sprite.position[0] && zoomCanvas.hidden) {
+      frame = board.getBoundingClientRect();
+    }
+    const target = tileFrame(frame, ...position);
+    const from = sprite.from;
+    const width = zoomAtProgress(from.width, target.width, progress);
+    const height = zoomAtProgress(from.height, target.height, progress);
+    const zoom = Math.abs(target.width - from.width) < .01 ? progress :
+      (width - from.width) / (target.width - from.width);
+    const cx = from.left + from.width / 2 + (target.left + target.width / 2 - from.left - from.width / 2) * zoom;
+    const cy = from.top + from.height / 2 + (target.top + target.height / 2 - from.top - from.height / 2) * zoom;
+    sprite.current = { left: cx - width / 2, top: cy - height / 2, width, height };
+    context.drawImage(sprite.canvas, sprite.current.left - area.left, sprite.current.top - area.top, width, height);
+    if (progress < 1) active.push(sprite);
+    else hiddenBoxes.delete(sprite.entity);
+  }
+  if (active.length) {
+    if (active.length !== motion.sprites.length) {
+      motion.sprites = active;
+      render();
+    }
+    motion.frame = requestAnimationFrame(paintBoxMotion);
+  }
+  else {
+    clearBoxMotion();
+    render();
+  }
+}
+
+function startBoxMotion(prepared) {
+  if (!prepared) return;
+  boxMotion = prepared;
+  boxCanvas.hidden = false;
+  paintBoxMotion(performance.now());
 }
 
 function updateRecursiveZoom(viewedRoom) {
@@ -582,6 +792,7 @@ function renderRoom(container, roomId) {
     const entity = occupied.get(index);
     const child = entity === undefined ? -1 : map.inside[entity];
     const crate = entity > 0;
+    cell.style.setProperty('--box-visibility', hiddenBoxes.has(entity) ? 'hidden' : 'visible');
     const goal = goalCells.has(index);
     const signature = (entity ?? '') + ':' + Number(goal) + ':' + Number(index === finishCell);
     if (cell.dataset.tile !== signature) {
@@ -609,6 +820,7 @@ function renderRoom(container, roomId) {
 
 function openLevel(index) {
   routeInput?.reset();
+  clearBoxMotion();
   clearRoomMotion();
   if (recursiveZoom) cancelAnimationFrame(recursiveZoom.frame);
   inspectedRoom = null;
@@ -671,6 +883,7 @@ function move(direction) {
 
 function applyState(next) {
   if (next === state) return;
+  const prepared = prepareBoxMotion(next, next.transfers ?? [], next.crossings ?? []);
   history.push(state);
   future = [];
   state = next;
@@ -679,21 +892,29 @@ function applyState(next) {
     saveProgress();
   }
   render(next.crossings);
+  startBoxMotion(prepared);
 }
 
 function undo() {
   if (history.length === 0) return;
   const crossings = (state.crossings ?? []).map(({ direction, owner }) => ({ direction: direction === 'in' ? 'out' : 'in', owner })).reverse();
+  const transfers = (state.transfers ?? []).map(transfer => ({
+    ...transfer, direction: transfer.direction === 'in' ? 'out' : 'in',
+  })).reverse();
+  const prepared = prepareBoxMotion(history.at(-1), transfers, crossings);
   future.push(state);
   state = history.pop();
   render(crossings);
+  startBoxMotion(prepared);
 }
 
 function redo() {
   if (future.length === 0) return;
+  const prepared = prepareBoxMotion(future.at(-1), future.at(-1).transfers ?? [], future.at(-1).crossings ?? []);
   history.push(state);
   state = future.pop();
   render(state.crossings);
+  startBoxMotion(prepared);
 }
 
 $('intro-convert').addEventListener('click', () => {
