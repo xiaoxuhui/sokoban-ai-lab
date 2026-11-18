@@ -52,7 +52,7 @@ const finishColor = '#fff2d9';
 let levelButtons = [];
 let chapterIndex = -1;
 const storageKey = 'sokoban-lab-box-intro-v1';
-const layoutRevision = 3;
+const layoutRevision = 5;
 const moveKeys = { arrowup: 0, w: 0, arrowright: 1, d: 1, arrowdown: 2, s: 2, arrowleft: 3, a: 3 };
 let active = 0;
 let complete = [];
@@ -70,7 +70,7 @@ let boxMotion;
 try {
   const saved = JSON.parse(localStorage.getItem(storageKey));
   if (Number.isInteger(saved?.active) && levels[saved.active]) active = saved.active;
-  if ((saved?.revision === 2 || saved?.revision === layoutRevision) && Array.isArray(saved.complete)) {
+  if ([2, 3, 4, layoutRevision].includes(saved?.revision) && Array.isArray(saved.complete)) {
     complete = saved.complete.slice(0, levels.length);
   }
   if (saved?.revision === 2) {
@@ -81,6 +81,16 @@ try {
     else if (active === tenth) active = seventh;
     if (complete.length > seventh) {
       [complete[seventh], complete[tenth]] = [complete[tenth], complete[seventh]];
+    }
+  }
+  if (saved?.revision === 2 || saved?.revision === 3) {
+    const swap = chapters.find(chapter => chapter.id === 'swap');
+    const third = swap.start + 2;
+    const fourth = swap.start + 3;
+    if (active === third) active = fourth;
+    else if (active === fourth) active = third;
+    if (complete.length > third) {
+      [complete[third], complete[fourth]] = [complete[fourth], complete[third]];
     }
   }
 } catch { /* Progress is optional when storage is unavailable. */ }
