@@ -20,7 +20,8 @@
 }
 .intro-stage.can-look-out { cursor: pointer; }
 .intro-stage .intro-board { cursor: default; }
-.intro-board { display: grid; grid-template-columns: repeat(var(--columns), minmax(0, 1fr)); width: 100%; max-width: calc(440px * var(--columns) / var(--longest-side)); user-select: none; overflow: hidden; border-radius: 8px; }
+/* Cover fractional cell edges so the enlarged outer room cannot bleed through. */
+.intro-board { display: grid; grid-template-columns: repeat(var(--columns), minmax(0, 1fr)); width: 100%; max-width: calc(440px * var(--columns) / var(--longest-side)); user-select: none; overflow: hidden; border-radius: 8px; background: var(--room-floor, #535257); }
 .intro-scene > :is(.intro-board, .intro-surround) { --scene-side: min(100cqw, 100cqh, 440px); }
 .intro-scene.with-surround > :is(.intro-board, .intro-surround) { --scene-side: min(85cqw, 85cqh, 396px); }
 .intro-scene > .intro-board { position: relative; z-index: 1; width: calc(var(--scene-side) * var(--columns) / var(--longest-side)); }
