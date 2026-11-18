@@ -295,7 +295,7 @@ function drawFinish(context, left, top, size, playerOnFinish) {
   if (!playerOnFinish) drawRoomEyes(context, left, top, size, finishColor);
 }
 
-function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true) {
+function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true, viewport = null) {
   const room = map.rooms[roomId];
   const hidden = [...hiddenBoxes].join(',');
   if (previewContents?.map !== map || previewContents.positions !== state.positions || previewContents.hidden !== hidden) {
@@ -306,11 +306,12 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
     previewContents = { map, positions: state.positions, hidden, pieces };
   }
   const cached = roomMaps.get(canvas);
+  const view = viewport ? [viewport.width, viewport.height, viewport.left, viewport.top].join(',') : '';
   if (cached?.contents === previewContents && cached.roomId === roomId && cached.size === size &&
-      cached.showFinish === showFinish && cached.nested === nested) return;
-  roomMaps.set(canvas, { contents: previewContents, roomId, size, showFinish, nested });
-  canvas.width = room.width * size;
-  canvas.height = room.height * size;
+      cached.showFinish === showFinish && cached.nested === nested && cached.view === view) return;
+  roomMaps.set(canvas, { contents: previewContents, roomId, size, showFinish, nested, view });
+  canvas.width = viewport?.width ?? Math.ceil(room.width * size);
+  canvas.height = viewport?.height ?? Math.ceil(room.height * size);
   const context = canvas.getContext('2d');
   const emptyChapter = board.classList.contains('empty-chapter');
   const cloneChapter = board.classList.contains('clone-chapter');
@@ -320,13 +321,18 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
 
   function paint(id, left, top, cellSize, depth) {
     const room = map.rooms[id];
+    if (left >= canvas.width || top >= canvas.height ||
+        left + room.width * cellSize <= 0 || top + room.height * cellSize <= 0) return;
     const pieces = previewContents.pieces[id];
     context.fillStyle = floorColor(id);
     context.fillRect(left, top, room.width * cellSize, room.height * cellSize);
     context.fillStyle = roomColor(id);
     for (let i = 0; i < room.tiles.length; i++) {
-      if (room.tiles[i] === '#') context.fillRect(left + i % room.width * cellSize,
-        top + Math.floor(i / room.width) * cellSize, cellSize, cellSize);
+      if (room.tiles[i] !== '#') continue;
+      const x = i % room.width, y = Math.floor(i / room.width);
+      const x0 = Math.round(left + x * cellSize), y0 = Math.round(top + y * cellSize);
+      context.fillRect(x0, y0, Math.round(left + (x + 1) * cellSize) - x0,
+        Math.round(top + (y + 1) * cellSize) - y0);
     }
     for (const [entity, x, y] of pieces) {
       const child = map.inside[entity];
@@ -360,7 +366,7 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
       drawFinish(context, left + finishX * cellSize, top + finishY * cellSize, cellSize, playerOnFinish);
     }
   }
-  paint(roomId, 0, 0, size, 0);
+  paint(roomId, viewport?.left ?? 0, viewport?.top ?? 0, size, 0);
 }
 
 function renderSurround(scene, roomId) {
@@ -372,12 +378,15 @@ function renderSurround(scene, roomId) {
   if (!parent) return;
 
   const [parentId, x, y] = parent;
-  const room = map.rooms[parentId];
-  outside.style.setProperty('--outer-columns', room.width);
-  outside.style.setProperty('--outer-rows', room.height);
-  outside.style.setProperty('--outer-x', x + 0.5);
-  outside.style.setProperty('--outer-y', y + 0.5);
-  drawRoomMap(outside, parentId, 32);
+  const viewed = map.rooms[roomId];
+  const size = board.clientWidth * Math.max(viewed.width, viewed.height) / viewed.width;
+  const ratio = devicePixelRatio || 1;
+  // Paint only the visible viewport, at its display resolution, even for a huge outer room.
+  drawRoomMap(outside, parentId, size * ratio, true, true, {
+    width: Math.round(scene.clientWidth * ratio), height: Math.round(scene.clientHeight * ratio),
+    left: (scene.clientWidth / 2 - (x + .5) * size) * ratio,
+    top: (scene.clientHeight / 2 - (y + .5) * size) * ratio,
+  });
 }
 
 function clearRoomMotion() {
@@ -472,7 +481,9 @@ function visibleRoomFrame(roomId, positions, seen = new Set()) {
   if (roomId === viewRoom) return board.getBoundingClientRect();
   const owner = map.rooms[viewRoom].owner;
   const outside = stage.querySelector('.intro-surround');
-  if (owner >= 0 && positions[owner][0] === roomId && !outside.hidden) return outside.getBoundingClientRect();
+  if (owner >= 0 && positions[owner][0] === roomId && !outside.hidden) {
+    return parentFrame(board.getBoundingClientRect(), positions[owner], 1);
+  }
   if (seen.has(roomId)) return null;
   seen.add(roomId);
   const host = positions[map.rooms[roomId].owner];
@@ -516,7 +527,7 @@ function transferFrame(frame, transfer, positions, inset) {
 
 function boxSprite(entity) {
   const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 192;
+  canvas.width = canvas.height = Math.ceil(Math.max(stage.clientWidth, stage.clientHeight) * (devicePixelRatio || 1));
   const context = canvas.getContext('2d');
   const child = map.inside[entity];
   const edge = canvas.width * .065;
@@ -534,7 +545,8 @@ function boxSprite(entity) {
   context.setLineDash([]);
   if (child >= 0) {
     const preview = document.createElement('canvas');
-    drawRoomMap(preview, child, 12);
+    const room = map.rooms[child];
+    drawRoomMap(preview, child, Math.ceil(side / Math.max(room.width, room.height)));
     const scale = (side - 12) / Math.max(preview.width, preview.height);
     const width = preview.width * scale;
     const height = preview.height * scale;
@@ -881,7 +893,13 @@ function renderRoom(container, roomId) {
         cell.append(button);
       } else if (crate) addPiece(cell, goal ? 'crate placed' : 'crate');
     }
-    if (child >= 0) drawRoomMap(cell.querySelector('canvas'), child);
+    if (child >= 0) {
+      const canvas = cell.querySelector('canvas');
+      const inner = map.rooms[child];
+      const size = Math.max(10, Math.ceil(Math.min(canvas.clientWidth / inner.width,
+        canvas.clientHeight / inner.height) * (devicePixelRatio || 1)));
+      drawRoomMap(canvas, child, size);
+    }
   }
 }
 
@@ -1068,6 +1086,7 @@ document.addEventListener('keydown', event => {
 });
 
 openLevel(active);
+new ResizeObserver(() => render()).observe(stage);
 routeInput = RouteInput.mount($('route-input'), {
   devices: () => false,
   state: () => state,
