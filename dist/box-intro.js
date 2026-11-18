@@ -26,6 +26,7 @@ const chapters = [
   { id: 'reference', title: '参照', levels: BoxCampaign.reference, color: '#2d9eca' },
   { id: 'swap', title: '调换', levels: BoxCampaign.swap, color: '#3488f4' },
   { id: 'center', title: '居中', levels: BoxCampaign.center, color: '#85829f' },
+  { id: 'clone', title: '克隆', levels: BoxCampaign.clone, color: '#8caad2' },
 ];
 const levels = [];
 for (const chapter of chapters) {
@@ -246,10 +247,13 @@ function renderTextMaps(playerRoom) {
     const child = map.inside[entity];
     glyphs[room][y * map.rooms[room].width + x] = entity === 0 ? 'p' : child >= 0 ? String(child + 1) : 'b';
   });
+  const cloneCells = new Set(state.positions.flatMap(([room, x, y], entity) =>
+    map.clones[entity] ? [room + ':' + (y * map.rooms[room].width + x)] : []));
   for (const [roomId, button] of Array.from(textMaps.children).entries()) {
     const cells = button.querySelector('.intro-text-lines').children;
     glyphs[roomId].forEach((glyph, index) => {
       const cell = cells[index];
+      cell.toggleAttribute('data-clone', cloneCells.has(roomId + ':' + index));
       if (cell.dataset.glyph !== glyph) {
         cell.textContent = glyph;
         cell.dataset.glyph = glyph;
@@ -261,6 +265,7 @@ function renderTextMaps(playerRoom) {
 }
 
 function floorColor(roomId) {
+  if (map.rooms[roomId].void) return '#090b10';
   return map.eat ? 'color-mix(in srgb, #241b2c 67%, ' + roomColor(roomId) + ')' : '#535257';
 }
 
@@ -305,13 +310,21 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true) {
     if (room.tiles[i] === '#') context.fillRect(i % room.width * size, Math.floor(i / room.width) * size, size, size);
   }
   const emptyChapter = board.classList.contains('empty-chapter');
-  const playerColor = board.classList.contains('reference-chapter') ? '#c53d3a' :
+  const cloneChapter = board.classList.contains('clone-chapter');
+  const playerColor = cloneChapter ? '#be2850' : board.classList.contains('reference-chapter') ? '#c53d3a' :
     map.eat ? '#d260bd' : emptyChapter ? '#db562f' : '#df328d';
-  const crateColor = map.eat ? '#ffdc72' : emptyChapter ? '#add444' : board.classList.contains('blue-crates') ? '#38bce8' : '#ffb63a';
+  const crateColor = cloneChapter ? '#468cfa' : map.eat ? '#ffdc72' : emptyChapter ? '#add444' : board.classList.contains('blue-crates') ? '#38bce8' : '#ffb63a';
   for (const [index, x, y] of pieces) {
     const child = map.inside[index];
     context.fillStyle = index === 0 ? playerColor : child >= 0 ? roomColor(child) : crateColor;
     context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
+    if (map.clones[index]) {
+      context.strokeStyle = '#e9f3ff';
+      context.lineWidth = size * .08;
+      context.setLineDash([size * .18, size * .12]);
+      context.strokeRect(x * size + 1, y * size + 1, size - 2, size - 2);
+      context.setLineDash([]);
+    }
     if (index === 0) drawRoomEyes(context, x * size, y * size, size, '#651914');
   }
   for (const [id, x, y] of map.goals) {
@@ -483,13 +496,16 @@ function boxSprite(entity) {
   const edge = canvas.width * .065;
   const side = canvas.width - edge * 2;
   context.fillStyle = child >= 0 ? roomColor(child) :
+    board.classList.contains('clone-chapter') ? '#468cfa' :
     board.classList.contains('blue-crates') ? '#38bce8' :
     board.classList.contains('empty-chapter') ? '#add444' :
     board.classList.contains('eat-chapter') ? '#ffdc72' : '#ffb63a';
   context.fillRect(edge, edge, side, side);
   context.strokeStyle = child >= 0 ? '#d2e1fa' : '#ffedaf';
   context.lineWidth = 3;
+  if (map.clones[entity]) context.setLineDash([18, 12]);
   context.strokeRect(edge, edge, side, side);
+  context.setLineDash([]);
   if (child >= 0) {
     const preview = document.createElement('canvas');
     drawRoomMap(preview, child, 12);
@@ -826,10 +842,14 @@ function renderRoom(container, roomId) {
         const button = document.createElement('button');
         button.type = 'button';
         button.dataset.shell = entity;
-        button.className = goal ? 'room-box room-on-goal' : 'room-box';
+        button.className = 'room-box' + (goal ? ' room-on-goal' : '') + (map.clones[entity] ? ' room-clone' : '');
         button.style.setProperty('--box-color', roomColor(child));
         button.setAttribute('aria-label', child === roomId ? '查看小箱子里的同一张棋盘' :
           '查看第 ' + (index % room.width + 1) + ' 列第 ' + (Math.floor(index / room.width) + 1) + ' 行的箱内房间');
+        if (map.clones[entity]) {
+          button.setAttribute('aria-label', '查看复制体里的共享房间，退出时回到本体');
+          button.title = '复制体：进入同一房间，退出回到本体';
+        }
         button.append(document.createElement('canvas'));
         button.addEventListener('click', () => inspectRoom(child, { direction: 'in', owner: entity }));
         cell.append(button);
@@ -868,7 +888,7 @@ function openLevel(index) {
     $('intro-levels').replaceChildren(...levelButtons);
   }
   const theme = chapters[nextChapter].id;
-  map = compile({ ...level, eat: ['eat', 'reference', 'swap', 'center'].includes(theme), allowCycles: ['reference', 'swap', 'center'].includes(theme) });
+  map = compile({ ...level, eat: ['eat', 'reference', 'swap', 'center', 'clone'].includes(theme), allowCycles: ['reference', 'swap', 'center', 'clone'].includes(theme) });
   const now = performance.now();
   recursiveZoom = level.recursiveZoom ? {
     direction: level.recursiveZoom,
@@ -889,6 +909,7 @@ function openLevel(index) {
   board.classList.toggle('empty-chapter', theme === 'empty');
   board.classList.toggle('eat-chapter', theme === 'eat');
   board.classList.toggle('reference-chapter', theme === 'reference');
+  board.classList.toggle('clone-chapter', theme === 'clone');
   board.replaceChildren();
   textMaps.replaceChildren();
   displayMode.hidden = !level.textView;

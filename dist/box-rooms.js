@@ -10,17 +10,21 @@
     const rooms = names.map(name => {
       const rows = definitions[name];
       if (!rows[0]?.length || rows.some(row => row.length !== rows[0].length)) throw Error('箱内地图的每行必须等宽。');
-      return { name, width: rows[0].length, height: rows.length, tiles: rows.join(''), owner: -1, color: level.colors?.[name] };
+      return { name, width: rows[0].length, height: rows.length, tiles: rows.join(''), owner: -1, color: level.colors?.[name], void: Boolean(level.voidRooms?.includes(name)) };
     });
     const inside = [-1];
+    const clones = [false];
     const positions = [null];
     const goals = [];
-    let finish = level.finish ? [0, ...level.finish] : null;
+    let finish = level.finish ? [roomIds.get(level.finishRoom ?? 'root'), ...level.finish] : null;
     for (const [roomId, room] of rooms.entries()) {
       for (let cell = 0; cell < room.tiles.length; cell++) {
         const symbol = room.tiles[cell];
         const name = symbol.toLowerCase();
-        const child = roomIds.get(name === 'r' ? 'root' : name) ?? -1;
+        const isClone = Object.hasOwn(level.clones ?? {}, name);
+        const target = isClone ? level.clones[name] : name === 'r' ? 'root' : name;
+        const child = roomIds.get(target) ?? -1;
+        if (isClone && child < 0) throw Error('复制体必须绑定已有的箱内房间。');
         const x = cell % room.width;
         const y = Math.floor(cell / room.width);
         const position = [roomId, x, y];
@@ -31,11 +35,12 @@
           positions[0] = position;
         } else if (symbol === '$' || symbol === '*' || child >= 0) {
           if (child >= 0 && symbol !== name) goals.push(position);
-          if (child >= 0) {
+          if (child >= 0 && !isClone) {
             if (rooms[child].owner !== -1) throw Error('每间箱内房间只能有一个外壳。');
             rooms[child].owner = positions.length;
           }
           inside.push(child);
+          clones.push(isClone);
           positions.push(position);
         } else if (symbol !== ' ' && symbol !== '#' && symbol !== '.' && symbol !== 'p') {
           throw Error('未知的关卡方块 ' + symbol);
@@ -44,7 +49,7 @@
     }
     if (!positions[0] || !finish || rooms.slice(1).some(room => room.owner < 0)) throw Error('请检查房间和玩家终点。');
     return {
-      rooms, inside, goals, finish, eat: Boolean(level.eat), allowCycles: Boolean(level.allowCycles),
+      rooms, inside, clones, goals, finish, eat: Boolean(level.eat), allowCycles: Boolean(level.allowCycles),
       initial: { positions, moves: 0, pushes: 0 },
     };
   }
@@ -112,6 +117,7 @@
 
     function enter(entity, owner, offset, heading, entered) {
       const childId = map.inside[owner];
+      if (map.rooms[positions[entity][0]].void) return false;
       if (owner === entity || childId < 0 || entered.has(owner)) return false;
       entered.add(owner);
       const [dx, dy] = directions[heading];

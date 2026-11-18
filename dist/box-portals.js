@@ -40,9 +40,24 @@
           if (room.tiles[y * room.width + x] === '#') continue;
           const edge = [offsets[roomId] + x + dx, y + dy, side ^ 2];
           // Entry from the surrounding room starts at the middle of the face.
-          if (lane === Math.floor(size / 2)) portals.push([face, edge]);
+          if (lane === Math.floor(size / 2) && !map.rooms[state.positions[room.owner][0]].void) portals.push([face, edge]);
           else portals.push([edge, face, 'one-way']);
         }
+      }
+    }
+    // Clone faces are entrances only. Every exit still belongs to the original shell.
+    for (let entity = 1; entity < state.positions.length; entity++) {
+      if (!map.clones?.[entity]) continue;
+      if (map.rooms[state.positions[entity][0]].void) continue;
+      const roomId = map.inside[entity];
+      const room = map.rooms[roomId];
+      const owner = location(state.positions[entity]);
+      for (const [side, [dx, dy]] of directions.entries()) {
+        const lane = Math.floor((dx ? room.height : room.width) / 2);
+        const x = dx ? (dx < 0 ? 0 : room.width - 1) : lane;
+        const y = dy ? (dy < 0 ? 0 : room.height - 1) : lane;
+        if (room.tiles[y * room.width + x] === '#') continue;
+        portals.push([[...owner, side], [offsets[roomId] + x + dx, y + dy, side ^ 2], 'one-way']);
       }
     }
     return {

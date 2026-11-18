@@ -42,6 +42,7 @@
 .intro-text-room [data-glyph="b"] { color: #ffdc72; }
 .intro-text-room [data-glyph="2"] { color: #8eafff; }
 .intro-text-room :is([data-glyph="_"], [data-glyph="="]) { color: #f7f0e5; }
+.intro-text-room [data-clone] { outline: 1px dashed currentColor; outline-offset: -2px; }
 .intro-board .cell { aspect-ratio: 1; border: 0; background: transparent; }
 .intro-board .cell.wall { border-radius: 0; background: transparent; box-shadow: none; }
 .intro-board .cell > .goal, .intro-board .cell > .intro-player-goal { width: 76%; height: 76%; border: 3px solid #dedbdf; border-radius: 2px; background: transparent; }
@@ -74,6 +75,10 @@
 .intro-board .room-box { position: absolute; width: 87%; height: 87%; padding: 2px; border-radius: 4px; background: var(--box-color); border: 1px solid #d2e1fa; display: grid; place-items: center; }
 .intro-board .room-box canvas { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .intro-board .room-box.room-on-goal { outline: 2px solid #f5dfa7; outline-offset: 1px; }
+.intro-board .room-box.room-clone { border: 2px dashed #e9f3ff; }
+.clone-chapter .crate { background: #468cfa; border-color: #91bdff; box-shadow: inset 0 -3px #2656a5, 0 2px 4px #141c36a6; }
+.clone-chapter .crate.placed { background: #83b5ff; border-color: #e0eeff; }
+.clone-chapter .player { background: #be2850; border-color: #f57b94; box-shadow: inset 0 -3px #7d1632, 0 2px 4px #211020a6; }
 .intro-board .cell:has(> .room-box) { z-index: 1; }
 .intro-controls, .intro-result { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
 .intro-controls .tools-group { flex-wrap: wrap; }

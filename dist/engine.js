@@ -508,7 +508,7 @@
       const beyond = map.adjacent(ahead, direction);
       const forward = portalOn(map, state.portalCells, box, direction);
       const facing = portalOn(map, state.portalCells, ahead, opposite(direction));
-      if (facing >= 0) rear.push({ entrance: facing, cargo: box, moved: new Map() });
+      if (facing >= 0) rear.push({ entrance: facing, cargo: box, moved: map.chainPush ? new Map(moved) : new Map() });
       if (forward >= 0) {
         // In a chain push, the boxes behind transmitted cargo fill the gap.
         const advance = map.chainPush ? new Map(moved).set(box, ahead) : new Map();
@@ -524,7 +524,8 @@
       box = ahead;
     }
     // Chain pushes reach this fallback only when the leading box hits a wall.
-    return [...rear, ...front, ...wall];
+    // Resolve the leading box before a trailing box enters an earlier face.
+    return [...(map.chainPush ? rear.reverse() : rear), ...front, ...wall];
   }
 
   function pushThroughPortal(map, state, occupied, first, direction, entryRoute = null) {

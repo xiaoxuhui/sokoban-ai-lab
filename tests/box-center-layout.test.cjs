@@ -27,16 +27,19 @@ const routes = [
   'UULDD DDURD LLLUL UUDDD DRRRL LLLLL LLURD RUUUU R',
   'RDDUL LLDRR URDRD LLLUL DLDRU RLDDD ULURR RRURD DDDLD DRRRL LLURR UUUUU UR',
   'LLDUU LLDDR RRDLL LULLD DRULU RDRRR UUULD DRDLU LDDDR DLUUL LLDRR RLLUR RURR',
+  'RRRDD LLURU DDDUU ULDRR DRRRU LLLLL LUURU R',
+  'RRDDR RULDL URULL LLLLL LUULL DRRDL ULDDU RRRRR RRRRR DRRUR LDLLU LLLLL LLUUR',
 ];
 const goals = [
   [[1,3,3]], [[1,2,3],[1,2,4]], [], [[0,4,4]], [[0,3,3]], [[0,5,0]],
   [[0,4,2],[0,4,4]], [[0,4,6]], [], [[0,4,3],[0,4,5]], [[0,6,5]],
   [[0,1,4]], [[0,4,6]], [[0,4,7],[0,5,7]],
+  [[0,2,4]], [[0,2,5]],
 ];
 const finishes = [[1,3,5],[1,2,2],[2,1,1],[0,6,6],[0,5,5],[0,5,1],[0,4,3],
-  [0,6,6],[3,4,4],[0,4,7],[0,7,5],[0,2,5],[0,7,1],[0,5,6]];
+  [0,6,6],[3,4,4],[0,4,7],[0,7,5],[0,2,5],[0,7,1],[0,5,6],[0,5,1],[0,5,1]];
 
-test('Center has exactly fourteen numbered levels', () => assert.equal(levels.length, 14));
+test('Center has exactly sixteen numbered levels', () => assert.equal(levels.length, 16));
 for (const [index, level] of levels.entries()) {
   test(`Center ${index + 1}: targets, player finish and reference input route`, () => {
     const map = compile({ ...level, eat: true, allowCycles: true });

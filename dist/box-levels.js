@@ -3,6 +3,7 @@
 // A lowercase letter marks a room box. Its uppercase form also marks a box goal.
 // The letter r links the small box to the main room.
 // A period marks a box goal, and p marks the player's goal.
+// A key in level.clones is an entrance to that room; exits use its original shell.
 const BoxCampaign = {
   intro: [
     {
@@ -612,6 +613,25 @@ const BoxCampaign = {
       rooms: { a: ["#####", "##   ", "##   ", "##  #", "#####"], b: ["###", "  #", "# #"] },
       colors: { root: "#85829f", a: "#86ca35", b: "#e7c249" },
       challenge: true,
+    },
+    {
+      title: "从狭缝里带出橙箱",
+      hint: "绿箱内部上下通道错开。把橙箱从偏口带出来，再把它送到左边的目标。",
+      rows: ["#######", "#### p#", "#    ##", "# @   #", "# .  a#", "#    ##", "#######"],
+      rooms: { a: ["# $   #", "#     #", "### ###", "      #", "#     #", "#######", "#######"] },
+      colors: { root: "#85829f", a: "#70a42c" },
+      textView: true,
+    },
+    {
+      title: "三个房间互相包含",
+      hint: "绿、黄、红三个房间连成循环。跟随每个房间的开口，把橙箱送回绿房间的目标。",
+      rows: ["#######", "#    p#", "#a    #", "#      ", "# #   #", "# .#  #", "#######"],
+      rooms: {
+        a: ["#######", "#     #", "#     #", "#b  #  ", "#  $  #", "#     #", "#######"],
+        b: ["#####", "#   #", "#r @ ", "#   #", "#####"],
+      },
+      colors: { root: "#70a42c", a: "#c6a63c", b: "#b34f31" },
+      textView: true,
     },
   ],
   swap: [
