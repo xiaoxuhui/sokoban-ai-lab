@@ -49,7 +49,7 @@
     }
     if (!positions[0] || !finish || rooms.slice(1).some(room => room.owner < 0)) throw Error('请检查房间和玩家终点。');
     return {
-      rooms, inside, clones, goals, finish, eat: Boolean(level.eat), allowCycles: Boolean(level.allowCycles),
+      rooms, inside, clones, goals, finish, eat: Boolean(level.eat), allowCycles: Boolean(level.allowCycles), transfer: Boolean(level.transfer),
       initial: { positions, moves: 0, pushes: 0 },
     };
   }
@@ -124,7 +124,8 @@
       const horizontal = dx !== 0;
       const child = map.rooms[childId];
       const scaled = offset * (horizontal ? child.height : child.width);
-      const lane = Math.floor(scaled);
+      // A face's exact centre selects the upper row on even-height rooms.
+      const lane = map.transfer && horizontal ? Math.max(0, Math.ceil(scaled) - 1) : Math.floor(scaled);
       const crossingsBefore = crossings.length;
       const transfersBefore = transfers.length;
       if (entity === 0) crossings.push({ direction: 'in', owner });

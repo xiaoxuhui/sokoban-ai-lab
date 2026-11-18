@@ -5,6 +5,7 @@
   const key = (x, y) => x + ',' + y;
 
   function convert(map, state) {
+    if (map.transfer) throw Error('转移关卡需要保留出入口位置，不能转成传送门地图。');
     const tiles = new Map();
     const portals = [];
     const offsets = [];

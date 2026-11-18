@@ -27,6 +27,7 @@ const chapters = [
   { id: 'swap', title: '调换', levels: BoxCampaign.swap, color: '#3488f4' },
   { id: 'center', title: '居中', levels: BoxCampaign.center, color: '#85829f' },
   { id: 'clone', title: '克隆', levels: BoxCampaign.clone, color: '#8caad2' },
+  { id: 'transfer', title: '转移', levels: BoxCampaign.transfer, color: '#5a8cdc' },
 ];
 const levels = [];
 for (const chapter of chapters) {
@@ -892,7 +893,9 @@ function openLevel(index) {
     $('intro-levels').replaceChildren(...levelButtons);
   }
   const theme = chapters[nextChapter].id;
-  map = compile({ ...level, eat: ['eat', 'reference', 'swap', 'center', 'clone'].includes(theme), allowCycles: ['reference', 'swap', 'center', 'clone'].includes(theme) });
+  map = compile({ ...level, eat: ['eat', 'reference', 'swap', 'center', 'clone', 'transfer'].includes(theme), allowCycles: ['reference', 'swap', 'center', 'clone', 'transfer'].includes(theme), transfer: theme === 'transfer' });
+  $('intro-convert').hidden = map.transfer;
+  $('intro-convert').disabled = map.transfer;
   const now = performance.now();
   recursiveZoom = level.recursiveZoom ? {
     direction: level.recursiveZoom,
@@ -964,6 +967,7 @@ function redo() {
 }
 
 $('intro-convert').addEventListener('click', () => {
+  if (map.transfer) return;
   const chapter = chapters[chapterIndex];
   const name = chapter.title + ' 第 ' + (active - chapter.start + 1) + ' 关 · 传送门';
   const code = JSON.stringify(BoxPortals.convert(map, state));
