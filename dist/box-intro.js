@@ -217,6 +217,10 @@ function setTextView(enabled) {
 
 function renderTextMaps(playerRoom) {
   if (!textMaps.children.length) {
+    const columns = map.rooms.reduce((sum, room) => sum + room.width, 0);
+    const rows = Math.max(...map.rooms.map(room => room.height));
+    textMaps.style.setProperty('--text-columns', columns + (map.rooms.length - 1) * .6 + .5);
+    textMaps.style.setProperty('--text-rows', rows * 1.55 + 2.1);
     for (const [roomId, room] of map.rooms.entries()) {
       const button = document.createElement('button');
       const label = document.createElement('span');

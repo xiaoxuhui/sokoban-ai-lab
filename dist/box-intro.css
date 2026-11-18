@@ -33,8 +33,8 @@
 .intro-stage:has(.intro-board :focus-visible) > .intro-recursive-view { pointer-events: none; opacity: 0; }
 .intro-stage.text-view { background: #17151c; }
 .intro-stage.text-view .intro-surround { visibility: hidden; }
-.intro-text-maps { --text-cell: clamp(11px, 4.75cqw, 27px); display: flex; align-items: flex-start; gap: calc(var(--text-cell) * .45); }
-.intro-text-room { display: grid; grid-template-columns: auto auto; align-items: center; column-gap: .55em; padding: 0; min-width: 0; border: 0; background: transparent; color: var(--text-room-color); font: 600 var(--text-cell)/1.55 "Courier New", monospace; text-align: left; }
+.intro-text-maps { --text-cell: min(27px, calc(100cqw / var(--text-columns, 20)), calc(100cqh / var(--text-rows, 16))); display: flex; align-items: flex-start; justify-content: center; gap: calc(var(--text-cell) * .6); max-width: 100%; min-width: 0; }
+.intro-text-room { display: grid; grid-template-columns: auto; justify-items: center; row-gap: .35em; padding: 0; min-width: 0; flex-shrink: 0; border: 0; background: transparent; color: var(--text-room-color); font: 600 var(--text-cell)/1.55 "Courier New", monospace; text-align: left; }
 .intro-text-room:hover { background: transparent; }
 .intro-text-lines { white-space: pre; }
 .intro-text-lines span { display: inline-block; width: var(--text-cell); }
