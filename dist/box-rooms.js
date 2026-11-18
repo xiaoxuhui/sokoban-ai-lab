@@ -50,6 +50,7 @@
     if (!positions[0] || !finish || rooms.slice(1).some(room => room.owner < 0)) throw Error('请检查房间和玩家终点。');
     return {
       rooms, inside, clones, goals, finish, eat: Boolean(level.eat), allowCycles: Boolean(level.allowCycles), transfer: Boolean(level.transfer),
+      portalConversion: level.portalConversion !== false,
       initial: { positions, moves: 0, pushes: 0 },
     };
   }
@@ -142,6 +143,13 @@
       const room = map.rooms[roomId];
       if (room.tiles[y * room.width + x] === '#' || (!map.allowCycles && insideOwnBox(entity, roomId))) return false;
       const occupant = positions.findIndex(position => matches(position, roomId, x, y));
+      // A forward push can close a loop through shared rooms. Its moving pieces
+      // vacate their old cells together, including the player's starting cell.
+      if (occupant >= 0 && moving.has(occupant)) {
+        if (!map.allowCycles || heading !== direction) return false;
+        positions[entity] = [roomId, x, y];
+        return true;
+      }
       if (occupant >= 0 && !moveEntity(occupant, 0.5, heading)) {
         if (enter(entity, occupant, offset, heading, entered)) return true;
         if (!map.eat || map.inside[entity] < 0 || moving.has(occupant)) return false;

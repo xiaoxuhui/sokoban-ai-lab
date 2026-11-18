@@ -6,6 +6,7 @@
 
   function convert(map, state) {
     if (map.transfer) throw Error('转移关卡需要保留出入口位置，不能转成传送门地图。');
+    if (map.portalConversion === false) throw Error('开放关卡的跨边界联动暂不支持转成传送门地图。');
     const tiles = new Map();
     const portals = [];
     const offsets = [];
