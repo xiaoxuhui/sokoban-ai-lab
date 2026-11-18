@@ -25,6 +25,7 @@ const chapters = [
   { id: 'eat', title: '吞食', levels: BoxCampaign.eat, color: '#ffa778' },
   { id: 'reference', title: '参照', levels: BoxCampaign.reference, color: '#2d9eca' },
   { id: 'swap', title: '调换', levels: BoxCampaign.swap, color: '#3488f4' },
+  { id: 'center', title: '居中', levels: BoxCampaign.center, color: '#85829f' },
 ];
 const levels = [];
 for (const chapter of chapters) {
@@ -857,7 +858,7 @@ function openLevel(index) {
     $('intro-levels').replaceChildren(...levelButtons);
   }
   const theme = chapters[nextChapter].id;
-  map = compile({ ...level, eat: ['eat', 'reference', 'swap'].includes(theme), allowCycles: ['reference', 'swap'].includes(theme) });
+  map = compile({ ...level, eat: ['eat', 'reference', 'swap', 'center'].includes(theme), allowCycles: ['reference', 'swap', 'center'].includes(theme) });
   const now = performance.now();
   recursiveZoom = level.recursiveZoom ? {
     direction: level.recursiveZoom,
