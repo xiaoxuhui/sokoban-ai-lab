@@ -306,7 +306,7 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
     previewContents = { map, positions: state.positions, hidden, pieces };
   }
   const cached = roomMaps.get(canvas);
-  const view = viewport ? [viewport.width, viewport.height, viewport.left, viewport.top].join(',') : '';
+  const view = viewport ? JSON.stringify(viewport) : '';
   if (cached?.contents === previewContents && cached.roomId === roomId && cached.size === size &&
       cached.showFinish === showFinish && cached.nested === nested && cached.view === view) return;
   roomMaps.set(canvas, { contents: previewContents, roomId, size, showFinish, nested, view });
@@ -366,7 +366,9 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
       drawFinish(context, left + finishX * cellSize, top + finishY * cellSize, cellSize, playerOnFinish);
     }
   }
-  paint(roomId, viewport?.left ?? 0, viewport?.top ?? 0, size, 0);
+  if (viewport?.layers) {
+    for (const layer of viewport.layers) paint(layer.roomId, layer.left, layer.top, layer.size, 0);
+  } else paint(roomId, viewport?.left ?? 0, viewport?.top ?? 0, size, 0);
 }
 
 function renderSurround(scene, roomId) {
@@ -377,16 +379,35 @@ function renderSurround(scene, roomId) {
   outside.hidden = !parent;
   if (!parent) return;
 
-  const [parentId, x, y] = parent;
-  const viewed = map.rooms[roomId];
-  const size = board.clientWidth * Math.max(viewed.width, viewed.height) / viewed.width;
   const ratio = devicePixelRatio || 1;
-  // Paint only the visible viewport, at its display resolution, even for a huge outer room.
-  drawRoomMap(outside, parentId, size * ratio, true, true, {
-    width: Math.round(scene.clientWidth * ratio), height: Math.round(scene.clientHeight * ratio),
-    left: (scene.clientWidth / 2 - (x + .5) * size) * ratio,
-    top: (scene.clientHeight / 2 - (y + .5) * size) * ratio,
-  });
+  const width = Math.round(scene.clientWidth * ratio), height = Math.round(scene.clientHeight * ratio);
+  let frame = {
+    left: width / 2 - board.clientWidth * ratio / 2,
+    top: height / 2 - board.clientHeight * ratio / 2,
+    width: board.clientWidth * ratio, height: board.clientHeight * ratio,
+  };
+  let current = roomId;
+  const seen = new Set([current]);
+  const layers = [];
+  while (true) {
+    const host = state.positions[map.rooms[current].owner];
+    if (!host) break;
+    const outer = map.rooms[host[0]];
+    const size = Math.max(frame.width, frame.height);
+    if (!Number.isFinite(size) || size > Number.MAX_SAFE_INTEGER / Math.max(outer.width, outer.height)) break;
+    frame = parentFrame(frame, host, 1);
+    layers.push({ roomId: host[0], size, left: frame.left, top: frame.top });
+    current = host[0];
+    if (seen.has(current)) break;
+    seen.add(current);
+  }
+  // Outer ancestors remain visible past an edge of the immediate parent room.
+  // Composite them into one viewport so resolution and memory do not grow with depth.
+  layers.reverse();
+  const outermost = layers[0];
+  if (!outermost) return;
+  scene.style.setProperty('--surround-color', roomColor(outermost.roomId));
+  drawRoomMap(outside, outermost.roomId, outermost.size, true, true, { width, height, layers });
 }
 
 function clearRoomMotion() {
@@ -479,10 +500,19 @@ function parentFrame(frame, host, inset = shellInset) {
 function visibleRoomFrame(roomId, positions, seen = new Set()) {
   const viewRoom = Number(board.dataset.room);
   if (roomId === viewRoom) return board.getBoundingClientRect();
-  const owner = map.rooms[viewRoom].owner;
   const outside = stage.querySelector('.intro-surround');
-  if (owner >= 0 && positions[owner][0] === roomId && !outside.hidden) {
-    return parentFrame(board.getBoundingClientRect(), positions[owner], 1);
+  if (!outside.hidden) {
+    let ancestor = viewRoom, frame = board.getBoundingClientRect();
+    const ancestors = new Set([ancestor]);
+    while (true) {
+      const host = positions[map.rooms[ancestor].owner];
+      if (!host) break;
+      frame = parentFrame(frame, host, 1);
+      ancestor = host[0];
+      if (ancestor === roomId) return frame;
+      if (ancestors.has(ancestor)) break;
+      ancestors.add(ancestor);
+    }
   }
   if (seen.has(roomId)) return null;
   seen.add(roomId);
