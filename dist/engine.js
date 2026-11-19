@@ -99,6 +99,7 @@
       adjacent: adjacentCell,
       neighbor: (cell, direction) => next[cell][direction],
       portalSides: portals.map(end => end.side),
+      portalGeometry: portals.map(end => end.geometry),
       portalIndex: indexPortals(portals, isWall, adjacentCell),
       initial: { player, boxes, moves: 0, pushes: 0, portalCells: portals.map(end => end.cell) },
     };
@@ -163,6 +164,16 @@
       }
       return ends;
     });
+    if (data.portalGeometry !== undefined) {
+      if (!Array.isArray(data.portalGeometry) || data.portalGeometry.length !== portals.length) throw Error('传送门出入口尺寸与连接数量不符。');
+      data.portalGeometry.forEach((geometry, id) => {
+        if (geometry == null) return;
+        if (!['face', 'edge'].includes(geometry.kind) || !Number.isSafeInteger(geometry.size) || geometry.size < 1 || geometry.size > 10000) throw Error('请检查传送门出入口尺寸。');
+        if (geometry.kind === 'edge' && (!Number.isInteger(geometry.lane) || geometry.lane < 0 || geometry.lane >= geometry.size)) throw Error('请检查传送门出口位置。');
+        if (geometry.kind === 'face' && (!Array.isArray(geometry.exits) || geometry.exits.length !== geometry.size || geometry.exits.some(e => e !== null && (!Array.isArray(e) || e.length !== 3 || !e.slice(0, 2).every(Number.isSafeInteger) || !directions[e[2]])))) throw Error('请检查传送门出口列表。');
+        portals[id].geometry = { ...geometry, exits: geometry.exits?.map(e => e && ({ cell: key(e[0], e[1]), side: e[2] })) };
+      });
+    }
     let finish = null;
     if (data.finish != null) {
       const location = data.finish;
@@ -210,7 +221,8 @@
     const deviceField = devices?.size ? ',\n  "devices": [\n    ' + [...devices].map(([cell, { kind, direction }]) =>
       JSON.stringify([...point(cell), kind, direction])).join(',\n    ') + '\n  ]' : '';
     const trainingField = unlimitedTraining ? '' : ',\n  "unlimitedTraining": false';
-    return '{\n  "version": 1,\n  "chainPush": ' + chainPush + ',\n  "tiles": [' + (lines.length ? '\n    ' + lines.join(',\n    ') + '\n  ' : '') + links + finishField + gameplayField + deviceField + trainingField + '\n}';
+    const geometryField = portals.some(end => end.geometry) ? ',\n  "portalGeometry": ' + JSON.stringify(portals.map(end => end.geometry ? { ...end.geometry, exits: end.geometry.exits?.map(e => e && [...point(e.cell), e.side]) } : null)) : '';
+    return '{\n  "version": 1,\n  "chainPush": ' + chainPush + ',\n  "tiles": [' + (lines.length ? '\n    ' + lines.join(',\n    ') + '\n  ' : '') + links + finishField + gameplayField + deviceField + trainingField + geometryField + '\n}';
   }
 
   function world(tiles, chainPush = false, portals = [], finish = null, { gameplay = 'classic', devices = new Map(), unlimitedTraining = true } = {}) {
@@ -238,6 +250,7 @@
     } else initial.portalCells = portals.map(end => end.cell);
     return {
       tiles, goals, finish, chainPush, gameplay, unlimitedTraining, isWall, adjacent, portalSides: portals.map(end => end.side),
+      portalGeometry: portals.map(end => end.geometry),
       portalIndex: indexPortals(portals, isWall, adjacent),
       initial,
       neighbor(cell, direction) {
@@ -286,7 +299,7 @@
     }
     return {
       ...compile(rows.map(row => row.join('')), chainPush,
-        portals.map(end => ({ ...end, cell: toIndex(end.cell) })), finish === null ? null : toIndex(finish)),
+        portals.map(end => ({ ...end, cell: toIndex(end.cell), geometry: end.geometry && { ...end.geometry, exits: end.geometry.exits?.map(e => e && ({ ...e, cell: toIndex(e.cell) })) } })), finish === null ? null : toIndex(finish)),
       worldCell: cell => key(left - margin + cell % width, top - margin + Math.floor(cell / width)),
     };
   }
@@ -454,6 +467,14 @@
     const box = state.boxes.indexOf(first);
     const wall = map.isWall(first);
     if (box < 0 && !wall) return { ...state, player: first, moves: state.moves + 1 };
+    if (map.chainPush) {
+      if (box >= 0) {
+        const occupied = new Set(state.boxes);
+        const landing = pushLanding(map, first, direction, occupied);
+        if (landing !== -1 && landing !== state.player) return moveStraight(map, state, first, box, landing, direction);
+      }
+      return planPortalStep(map, state, direction);
+    }
 
     let occupied;
     if (box >= 0) {
@@ -485,6 +506,116 @@
       visited = exit.pairs;
     }
     return state;
+  }
+
+  // Resolve a connected push against the original board, then commit every
+  // destination together. Moving a portal host early changes its own exit and
+  // prevents closed chains from rotating correctly.
+  function planPortalStep(map, state, direction) {
+    const original = [state.player, ...state.boxes];
+    const occupants = new Map(original.map((cell, id) => [cell, id]));
+    const destinations = original.slice();
+    const active = new Map();
+    const mirrored = original.map(() => false);
+    const sides = state.portalSides ?? map.portalSides;
+    const faceFlipped = state.portalFlipped ?? map.portalGeometry.map(g => Boolean(g?.flipped));
+    const faces = new Map();
+    state.portalCells.forEach((cell, endpoint) => {
+      if (!map.portalIndex.exitOnly[endpoint]) addPortalFace(faces, cell, sides[endpoint], endpoint);
+    });
+    const faceOn = (cell, side) => faces.get(cell)?.[side] ?? -1;
+    let cycle = null;
+    const snapshot = () => ({ destinations: destinations.slice(), mirrored: mirrored.slice(), cycle });
+    function restore(saved) {
+      for (let i = 0; i < destinations.length; i++) destinations[i] = saved.destinations[i];
+      for (let i = 0; i < mirrored.length; i++) mirrored[i] = saved.mirrored[i];
+      cycle = saved.cycle;
+    }
+    function move(id, heading) {
+      const saved = snapshot();
+      active.set(id, heading);
+      const success = land(id, map.adjacent(original[id], heading), heading, new Set(), 0.5);
+      active.delete(id);
+      if (!success) restore(saved);
+      return success;
+    }
+    function enter(id, entrance, visited, offset = 0.5) {
+      if (entrance < 0 || visited.has(entrance)) return false;
+      const exit = entrance ^ 1;
+      // A box cannot leave its own interior through its own moving shell.
+      if (id > 0 && state.portalCells[exit] === original[id]) return false;
+      const saved = snapshot();
+      const nextVisited = new Set(visited).add(entrance);
+      const geometry = map.portalGeometry[entrance];
+      let heading = sides[exit];
+      let host = state.portalCells[exit];
+      if (geometry?.kind === 'face') {
+        if (faceFlipped[entrance]) {
+          mirrored[id] = !mirrored[id];
+          if (!(sides[entrance] % 2)) offset = 1 - offset;
+        }
+        const scaled = offset * geometry.size;
+        const lane = Math.min(geometry.size - 1, Math.floor(scaled));
+        const target = geometry.exits[lane];
+        if (!target) { restore(saved); return false; }
+        host = target.cell;
+        heading = target.side;
+        offset = scaled - lane;
+      } else if (geometry?.kind === 'edge') {
+        offset = (geometry.lane + offset) / geometry.size;
+        if (faceFlipped[exit]) {
+          mirrored[id] = !mirrored[id];
+          if (!(heading % 2)) offset = 1 - offset;
+        }
+      }
+      const success = land(id, map.adjacent(host, heading), heading, nextVisited, offset);
+      if (!success) restore(saved);
+      return success;
+    }
+    function land(id, cell, heading, visited, offset) {
+      if (cell === -1) return false;
+      if (map.isWall(cell)) return enter(id, faceOn(cell, opposite(heading)), visited, offset);
+      const occupant = occupants.get(cell);
+      if (occupant !== undefined && active.has(occupant)) {
+        if (heading !== active.get(occupant)) return false;
+        const chain = [...active.keys()];
+        cycle = new Set(chain.slice(chain.indexOf(occupant)));
+      } else if (occupant !== undefined && !move(occupant, heading)) {
+        if (enter(id, faceOn(cell, opposite(heading)), visited, offset)) return true;
+        // A moving host can swallow the object at its leading face.
+        if (id === 0 || active.has(occupant)) return false;
+        const saved = snapshot();
+        active.set(occupant, opposite(heading));
+        const swallowed = enter(occupant, faceOn(original[id], heading), new Set());
+        active.delete(occupant);
+        if (!swallowed) { restore(saved); return false; }
+      }
+      destinations[id] = cell;
+      return true;
+    }
+    if (!move(0, direction)) return state;
+    if (cycle) for (let id = 0; id < destinations.length; id++) if (!cycle.has(id)) { destinations[id] = original[id]; mirrored[id] = false; }
+    const moved = new Map(original.slice(1).map((cell, i) => [cell, destinations[i + 1]]));
+    const boxes = destinations.slice(1);
+    if (new Set(destinations).size !== destinations.length) return state;
+    if (typeof state.player === 'number') boxes.sort((a, b) => a - b);
+    const hasGeometry = map.portalGeometry.some(Boolean);
+    const nextSides = hasGeometry ? sides.slice() : undefined;
+    const nextFlipped = hasGeometry ? faceFlipped.slice() : undefined;
+    if (hasGeometry) state.portalCells.forEach((cell, endpoint) => {
+      const entity = occupants.get(cell);
+      if (entity > 0 && mirrored[entity] && !map.isWall(cell)) {
+        nextFlipped[endpoint] = !nextFlipped[endpoint];
+        if (nextSides[endpoint] % 2) nextSides[endpoint] ^= 2;
+      }
+    });
+    return {
+      ...state, player: destinations[0], boxes,
+      portalCells: state.portalCells.map(cell => moved.get(cell) ?? cell),
+      ...(hasGeometry ? { portalSides: nextSides, portalFlipped: nextFlipped } : {}),
+      moves: state.moves + 1,
+      pushes: state.pushes + Number(destinations.some((cell, id) => id > 0 && (cell !== original[id] || mirrored[id]))),
+    };
   }
 
   function pushPlans(map, state, occupied, first, direction) {
@@ -685,7 +816,7 @@
       addPortalPush(map.neighbor(cell, side), opposite(side));
     });
     const key = hasPortals ?
-      [state.player, state.boxes.join(','), state.portalCells.join(',')].join(':') :
+      [state.player, state.boxes.join(','), state.portalCells.join(','), state.portalFlipped?.map(Number).join('') ?? ''].join(':') :
       area.first + ':' + state.boxes.join(',');
     return { area, actions, key, finishReachable };
   }

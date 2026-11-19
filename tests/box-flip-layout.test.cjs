@@ -15,7 +15,7 @@ const routes = [
   'LLLDD DUURR RRDRR RRLUU LLLLD LULLU UUUUR',
   'RDRLL ULULL ULLDD DLLLL LLRUU URRDD DDUUU RRRDD RRRRD RUD',
 ];
-test('Flip contains sixteen numbered levels', () => assert.equal(levels.length, 16));
+test('Flip contains seventeen numbered levels', () => assert.equal(levels.length, 17));
 for (const [i, level] of levels.slice(0, 2).entries()) {
   test(`Flip ${i + 1}: reference route and portal conversion preserve every move`, () => {
     const map = B.compile({ ...level, eat: true, allowCycles: true });
@@ -65,7 +65,7 @@ for (const [i, level] of levels.slice(0, 2).entries()) {
 
 // Original level input files use logical directions after crossing a mirror.
 const allRoutes = require('./fixtures/box-flip-routes.json');
-const goalCounts = [1,1,2,1,3,2,0,3,1,2,1,2,1,2,1,2];
+const goalCounts = [1,1,2,1,3,2,0,3,1,2,1,2,1,2,1,2,0];
 for (const [i, level] of levels.entries()) {
   test(`Flip ${i + 1}: original input route, orientation and immutable history`, () => {
     const map = B.compile({ ...level, eat: true, allowCycles: true });

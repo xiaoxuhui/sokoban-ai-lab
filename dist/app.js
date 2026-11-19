@@ -174,7 +174,7 @@ function renderBoard(state, previous = null) {
     if (changed && !changed.has(coordinate)) return;
     if (!marks.has(coordinate)) marks.set(coordinate, []);
     const kind = map.portalIndex.exitOnly[index] ? 'exit' : map.portalIndex.exitOnly[index | 1] ? 'entry' : '';
-    marks.get(coordinate).push({ side: map.portalSides[index], pair: Math.floor(index / 2) + 1, kind });
+    marks.get(coordinate).push({ side: (state.portalSides ?? map.portalSides)[index], pair: Math.floor(index / 2) + 1, kind });
   });
   if (linking && pendingPortal) {
     if (!marks.has(pendingPortal.cell)) marks.set(pendingPortal.cell, []);
@@ -275,8 +275,9 @@ function renderPortalArrows(state) {
   const scale = window.devicePixelRatio || 1;
   if (portalArrowLayout?.map === map && portalArrowLayout.camera === camera && portalArrowLayout.scale === scale &&
       portalArrowLayout.width === viewWidth && portalArrowLayout.height === viewHeight &&
+      portalArrowLayout.sides === state.portalSides &&
       (portalArrowLayout.links === links || links.every((cell, index) => portalArrowLayout.links[index] === cell))) return;
-  portalArrowLayout = { map, camera, scale, width: viewWidth, height: viewHeight, links };
+  portalArrowLayout = { map, camera, scale, width: viewWidth, height: viewHeight, links, sides: state.portalSides };
   const width = Math.round(viewWidth * scale);
   const height = Math.round(viewHeight * scale);
   if (portalCanvas.width !== width) portalCanvas.width = width;
@@ -289,7 +290,7 @@ function renderPortalArrows(state) {
   const size = cellSize();
   const facePoint = index => {
     const [x, y] = point(links[index]);
-    const [offsetX, offsetY] = portalOffsets[map.portalSides[index]];
+    const [offsetX, offsetY] = portalOffsets[(state.portalSides ?? map.portalSides)[index]];
     return [(x + 0.5 + offsetX - camera.x) * size + viewWidth / 2,
       (y + 0.5 + offsetY - camera.y) * size + viewHeight / 2];
   };
@@ -353,7 +354,7 @@ function changedCells(previous, state, boxes) {
   }
   state.portalCells.forEach((coordinate, index) => {
     const old = previous.portalCells[index];
-    if (old === coordinate) return;
+    if (old === coordinate && (previous.portalSides ?? map.portalSides)[index] === (state.portalSides ?? map.portalSides)[index]) return;
     changed.add(old);
     changed.add(coordinate);
   });

@@ -73,17 +73,19 @@
     const positions = state.positions.slice();
     const flipped = (state.flipped ?? map.flipped).slice();
     const moving = new Map();
+    let cycleMembers = null;
     const crossings = [];
     const transfers = [];
 
     function checkpoint() {
-      return { positions: positions.slice(), flipped: flipped.slice(), crossings: crossings.length, transfers: transfers.length };
+      return { positions: positions.slice(), flipped: flipped.slice(), crossings: crossings.length, transfers: transfers.length, cycleMembers };
     }
 
     function restore(saved) {
       for (let i = 0; i < positions.length; i++) { positions[i] = saved.positions[i]; flipped[i] = saved.flipped[i]; }
       crossings.length = saved.crossings;
       transfers.length = saved.transfers;
+      cycleMembers = saved.cycleMembers;
     }
 
     function insideOwnBox(entity, roomId) {
@@ -169,6 +171,8 @@
       // vacate their old cells together, including the player's starting cell.
       if (occupant >= 0 && moving.has(occupant)) {
         if (!map.allowCycles || heading !== moving.get(occupant)) return false;
+        const chain = [...moving.keys()];
+        cycleMembers = new Set(chain.slice(chain.indexOf(occupant)));
         positions[entity] = [roomId, x, y];
         return true;
       }
@@ -186,6 +190,16 @@
     }
 
     if (!moveEntity(0, 0.5, direction)) return state;
+    // Only the closed part of the chain rotates. A pusher outside that loop
+    // keeps its cell; otherwise it would overlap the box returning behind it.
+    if (cycleMembers) {
+      for (let id = 0; id < positions.length; id++) if (!cycleMembers.has(id)) {
+        positions[id] = state.positions[id];
+        flipped[id] = (state.flipped ?? map.flipped)[id];
+      }
+      if (!cycleMembers.has(0)) crossings.length = 0;
+      for (let i = transfers.length - 1; i >= 0; i--) if (!cycleMembers.has(transfers[i].entity)) transfers.splice(i, 1);
+    }
     const pushed = positions.some((position, index) => index > 0 && position !== state.positions[index]);
     return { positions, flipped, moves: state.moves + 1, pushes: state.pushes + Number(pushed), crossings, transfers };
   }

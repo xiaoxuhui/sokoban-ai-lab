@@ -201,4 +201,47 @@ BoxCampaign.flip = [
     portalConversion: false,
     challenge: true,
   },
+{
+  "title": "翻转 17",
+  "hint": "穿过镜像出入口时，箱子自身也会左右翻转；留意它的开口方向。",
+  "rows": [
+    "#######",
+    "# a  z#",
+    "#      ",
+    "#      ",
+    "# @   r",
+    "#      ",
+    "#######"
+  ],
+  "rooms": {
+    "a": [
+      "#######",
+      "#######",
+      "#######",
+      "#######",
+      "#######",
+      "  #####",
+      "#######"
+    ]
+  },
+  "clones": {
+    "z": "root"
+  },
+  "finish": [
+    1,
+    5
+  ],
+  "finishRoom": "a",
+  "colors": {
+    "root": "#786efa",
+    "a": "#aa4664"
+  },
+  "flipped": [
+    "z",
+    "a"
+  ],
+  "portalConversion": false,
+  "sourceFile": "text_flip",
+  "textView": true
+}
 ];

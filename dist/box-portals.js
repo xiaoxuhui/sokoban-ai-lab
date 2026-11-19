@@ -9,6 +9,7 @@
     if (map.portalConversion === false) throw Error(map.conversionReason ?? '当前关卡的规则暂不支持转成传送门地图。');
     const tiles = new Map();
     const portals = [];
+    const portalGeometry = [];
     const offsets = [];
     const flipped = state.flipped ?? map.flipped;
     let left = 0;
@@ -37,14 +38,27 @@
       for (const [side, [dx, dy]] of directions.entries()) {
         const size = dx ? room.height : room.width;
         const face = [...owner, flipped?.[room.owner] && dx ? side ^ 2 : side];
+        const exits = Array.from({ length: size }, (_, lane) => {
+          const x = dx ? (dx < 0 ? 0 : room.width - 1) : lane;
+          const y = dy ? (dy < 0 ? 0 : room.height - 1) : lane;
+          return room.tiles[y * room.width + x] === '#' ? null : [offsets[roomId] + x + dx, y + dy, side ^ 2];
+        });
+        if (!exits.some(Boolean)) continue;
         for (let lane = 0; lane < size; lane++) {
           const x = dx ? (dx < 0 ? 0 : room.width - 1) : lane;
           const y = dy ? (dy < 0 ? 0 : room.height - 1) : lane;
-          if (room.tiles[y * room.width + x] === '#') continue;
+          if (room.tiles[y * room.width + x] === '#' && lane !== Math.floor(size / 2)) continue;
           const edge = [offsets[roomId] + x + dx, y + dy, side ^ 2];
           // Entry from the surrounding room starts at the middle of the face.
-          if (lane === Math.floor(size / 2) && !map.rooms[state.positions[room.owner][0]].void) portals.push([face, edge]);
-          else portals.push([edge, face, 'one-way']);
+          const faceGeometry = { kind: 'face', size, flipped: Boolean(flipped?.[room.owner]), exits };
+          const edgeGeometry = { kind: 'edge', size, lane };
+          if (lane === Math.floor(size / 2) && !map.rooms[state.positions[room.owner][0]].void) {
+            portals.push([face, edge]);
+            portalGeometry.push(faceGeometry, edgeGeometry);
+          } else {
+            portals.push([edge, face, 'one-way']);
+            portalGeometry.push(edgeGeometry, faceGeometry);
+          }
         }
       }
     }
@@ -59,8 +73,15 @@
         const lane = Math.floor((dx ? room.height : room.width) / 2);
         const x = dx ? (dx < 0 ? 0 : room.width - 1) : lane;
         const y = dy ? (dy < 0 ? 0 : room.height - 1) : lane;
-        if (room.tiles[y * room.width + x] === '#') continue;
+        const size = dx ? room.height : room.width;
+        const exits = Array.from({ length: size }, (_, lane) => {
+          const x = dx ? (dx < 0 ? 0 : room.width - 1) : lane;
+          const y = dy ? (dy < 0 ? 0 : room.height - 1) : lane;
+          return room.tiles[y * room.width + x] === '#' ? null : [offsets[roomId] + x + dx, y + dy, side ^ 2];
+        });
+        if (!exits.some(Boolean)) continue;
         portals.push([[...owner, flipped?.[entity] && dx ? side ^ 2 : side], [offsets[roomId] + x + dx, y + dy, side ^ 2], 'one-way']);
+        portalGeometry.push({ kind: 'face', size, flipped: Boolean(flipped?.[entity]), exits }, { kind: 'edge', size, lane });
       }
     }
     return {
@@ -68,6 +89,7 @@
       chainPush: true,
       tiles: Array.from(tiles, ([cell, tile]) => [...cell.split(',').map(Number), tile]),
       portals,
+      portalGeometry,
       finish: location(map.finish),
     };
   }

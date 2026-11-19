@@ -30,6 +30,7 @@ const chapters = [
   { id: 'transfer', title: '转移', levels: BoxCampaign.transfer, color: '#5a8cdc' },
   { id: 'open', title: '开放', levels: BoxCampaign.open, color: '#6496e6' },
   { id: 'flip', title: '翻转', levels: BoxCampaign.flip, color: '#786efa' },
+  { id: 'cycle', title: '循环', levels: BoxCampaign.cycle, color: '#786efa' },
 ];
 const levels = [];
 for (const chapter of chapters) {
@@ -1047,7 +1048,7 @@ function openLevel(index) {
     $('intro-levels').replaceChildren(...levelButtons);
   }
   const theme = chapters[nextChapter].id;
-  map = compile({ ...level, eat: ['eat', 'reference', 'swap', 'center', 'clone', 'transfer', 'open', 'flip'].includes(theme), allowCycles: ['reference', 'swap', 'center', 'clone', 'transfer', 'open', 'flip'].includes(theme), transfer: theme === 'transfer' });
+  map = compile({ ...level, eat: ['eat', 'reference', 'swap', 'center', 'clone', 'transfer', 'open', 'flip', 'cycle'].includes(theme), allowCycles: ['reference', 'swap', 'center', 'clone', 'transfer', 'open', 'flip', 'cycle'].includes(theme), transfer: theme === 'transfer' });
   $('intro-convert').hidden = map.transfer || !map.portalConversion;
   $('intro-convert').disabled = map.transfer || !map.portalConversion;
   const now = performance.now();
