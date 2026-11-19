@@ -25,6 +25,9 @@
 .intro-scene > :is(.intro-board, .intro-surround) { --scene-side: min(100cqw, 100cqh, 440px); }
 .intro-scene.with-surround > :is(.intro-board, .intro-surround) { --scene-side: min(85cqw, 85cqh, 396px); }
 .intro-scene > .intro-board { position: relative; z-index: 1; width: calc(var(--scene-side) * var(--columns) / var(--longest-side)); }
+.intro-scene > .intro-board.compressed-rooms { width: var(--scene-side); height: var(--scene-side); max-width: none; grid-template-rows: repeat(var(--rows), minmax(0, 1fr)); }
+.intro-board.compressed-rooms .cell { aspect-ratio: auto; min-width: 0; min-height: 0; }
+.intro-board.compressed-rooms .room-box canvas { position: absolute; inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); object-fit: fill; }
 .intro-scene > .intro-ghost { position: absolute; max-width: none; opacity: 0; pointer-events: none; z-index: 2; }
 .intro-surround { position: absolute; pointer-events: none; opacity: .65; inset: 0; width: 100%; height: 100%; }
 .intro-recursive-view { position: absolute; inset: 0; z-index: 3; width: 100%; height: 100%; }

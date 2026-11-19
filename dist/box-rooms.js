@@ -53,6 +53,7 @@
     return {
       rooms, inside, clones, flipped, goals, finish, eat: Boolean(level.eat), allowCycles: Boolean(level.allowCycles), transfer: Boolean(level.transfer),
       portalConversion: level.portalConversion !== false,
+      compressedRooms: Boolean(level.compressedRooms),
       conversionReason: level.conversionReason ?? '当前关卡的规则暂不支持转成传送门地图。',
       initial: { positions, flipped: flipped.slice(), moves: 0, pushes: 0 },
     };

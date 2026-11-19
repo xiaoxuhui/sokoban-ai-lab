@@ -367,13 +367,23 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
     map.eat ? '#d260bd' : emptyChapter ? '#db562f' : '#df328d';
   const crateColor = flipChapter ? '#5abea0' : cloneChapter ? '#468cfa' : map.eat ? '#ffdc72' : emptyChapter ? '#add444' : board.classList.contains('blue-crates') ? '#38bce8' : '#ffb63a';
 
-  function paint(id, left, top, cellSize, depth, mirrored = false) {
+  function paint(id, left, top, cellSize, depth, mirrored = false, bounds = null) {
     const room = map.rooms[id];
+    if (bounds) {
+      context.save();
+      context.translate(left, top);
+      context.scale(bounds.width / (room.width * cellSize), bounds.height / (room.height * cellSize));
+      paint(id, 0, 0, cellSize, depth, mirrored);
+      context.restore();
+      return;
+    }
     const transform = context.getTransform();
     const x1 = transform.a * left + transform.e;
     const x2 = transform.a * (left + room.width * cellSize) + transform.e;
-    if (Math.min(x1, x2) >= canvas.width || top >= canvas.height ||
-        Math.max(x1, x2) <= 0 || top + room.height * cellSize <= 0) return;
+    const y1 = transform.d * top + transform.f;
+    const y2 = transform.d * (top + room.height * cellSize) + transform.f;
+    if (Math.min(x1, x2) >= canvas.width || Math.min(y1, y2) >= canvas.height ||
+        Math.max(x1, x2) <= 0 || Math.max(y1, y2) <= 0) return;
     context.save();
     if (mirrored) {
       context.translate(left * 2 + room.width * cellSize, 0);
@@ -389,10 +399,11 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
       const x = i % room.width, y = Math.floor(i / room.width);
       const x0 = Math.round(wallTransform.a * (left + x * cellSize) + wallTransform.e);
       const x1 = Math.round(wallTransform.a * (left + (x + 1) * cellSize) + wallTransform.e);
-      const y0 = Math.round(top + y * cellSize);
+      const y0 = Math.round(wallTransform.d * (top + y * cellSize) + wallTransform.f);
+      const y1 = Math.round(wallTransform.d * (top + (y + 1) * cellSize) + wallTransform.f);
       const localX = Math.min((x0 - wallTransform.e) / wallTransform.a, (x1 - wallTransform.e) / wallTransform.a);
-      context.fillRect(localX, y0, Math.abs(x1 - x0),
-        Math.round(top + (y + 1) * cellSize) - y0);
+      context.fillRect(localX, (y0 - wallTransform.f) / wallTransform.d, Math.abs((x1 - x0) / wallTransform.a),
+        (y1 - y0) / wallTransform.d);
     }
     for (const [entity, x, y] of pieces) {
       const child = map.inside[entity];
@@ -405,8 +416,12 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
       if (nested && child >= 0 && side >= 3 && depth < 12) {
         const inner = map.rooms[child];
         const scale = side / Math.max(inner.width, inner.height);
-        paint(child, px + (cellSize - inner.width * scale) / 2,
-          py + (cellSize - inner.height * scale) / 2, scale, depth + 1, (state.flipped ?? map.flipped)[entity]);
+        if (map.compressedRooms) {
+          paint(child, px + inset, py + inset, scale, depth + 1, (state.flipped ?? map.flipped)[entity], { width: side, height: side });
+        } else {
+          paint(child, px + (cellSize - inner.width * scale) / 2,
+            py + (cellSize - inner.height * scale) / 2, scale, depth + 1, (state.flipped ?? map.flipped)[entity]);
+        }
       }
       if (map.clones[entity]) {
         context.fillStyle = 'rgba(255,255,255,.22)';
@@ -430,7 +445,8 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
     context.restore();
   }
   if (viewport?.layers) {
-    for (const layer of viewport.layers) paint(layer.roomId, layer.left, layer.top, layer.size, 0, layer.flipped);
+    for (const layer of viewport.layers) paint(layer.roomId, layer.left, layer.top, layer.size, 0, layer.flipped,
+      map.compressedRooms ? { width: layer.width, height: layer.height } : null);
   } else paint(roomId, viewport?.left ?? 0, viewport?.top ?? 0, size, 0, flipped);
 }
 
@@ -461,7 +477,7 @@ function renderSurround(scene, roomId) {
     if (!Number.isFinite(size) || size > Number.MAX_SAFE_INTEGER / Math.max(outer.width, outer.height)) break;
     mirrored = mirrored !== (state.flipped ?? map.flipped)[map.rooms[current].owner];
     frame = parentFrame(frame, host, 1, mirrored);
-    layers.push({ roomId: host[0], size, left: frame.left, top: frame.top, flipped: mirrored });
+    layers.push({ roomId: host[0], size, left: frame.left, top: frame.top, width: frame.width, height: frame.height, flipped: mirrored });
     current = host[0];
     if (seen.has(current)) break;
     seen.add(current);
@@ -499,6 +515,14 @@ function cloneBoard() {
 
 function cameraPose(rect, anchor, target) {
   const scale = Math.min(target.width / anchor.width, target.height / anchor.height);
+  if (map.compressedRooms) {
+    const scaleX = target.width / anchor.width, scaleY = target.height / anchor.height;
+    return {
+      x: target.left + target.width / 2 - rect.left - rect.width / 2 + (rect.left + rect.width / 2 - anchor.left - anchor.width / 2) * scaleX,
+      y: target.top + target.height / 2 - rect.top - rect.height / 2 + (rect.top + rect.height / 2 - anchor.top - anchor.height / 2) * scaleY,
+      scale: Math.sqrt(scaleX * scaleY), scaleX, scaleY,
+    };
+  }
   return {
     x: target.left + target.width / 2 - rect.left - rect.width / 2 +
       (rect.left + rect.width / 2 - anchor.left - anchor.width / 2) * scale,
@@ -524,11 +548,19 @@ function animateCamera(element, from, to, fromOpacity, toOpacity, duration) {
     const progress = index / 8;
     const scale = zoomAtProgress(from.scale, to.scale, progress);
     const zoom = to.scale === from.scale ? progress : (scale - from.scale) / (to.scale - from.scale);
-    const x = from.x + (to.x - from.x) * zoom;
-    const y = from.y + (to.y - from.y) * zoom;
+    const scaleX = zoomAtProgress(from.scaleX ?? from.scale, to.scaleX ?? to.scale, progress);
+    const scaleY = zoomAtProgress(from.scaleY ?? from.scale, to.scaleY ?? to.scale, progress);
+    const zoomX = from.scaleX === undefined && to.scaleX === undefined ? zoom :
+      (to.scaleX ?? to.scale) === (from.scaleX ?? from.scale) ? progress :
+        (scaleX - (from.scaleX ?? from.scale)) / ((to.scaleX ?? to.scale) - (from.scaleX ?? from.scale));
+    const zoomY = from.scaleY === undefined && to.scaleY === undefined ? zoom :
+      (to.scaleY ?? to.scale) === (from.scaleY ?? from.scale) ? progress :
+        (scaleY - (from.scaleY ?? from.scale)) / ((to.scaleY ?? to.scale) - (from.scaleY ?? from.scale));
+    const x = from.x + (to.x - from.x) * zoomX;
+    const y = from.y + (to.y - from.y) * zoomY;
     return {
       opacity: fromOpacity + (toOpacity - fromOpacity) * progress,
-      transform: 'translate(' + x + 'px, ' + y + 'px) scale(' + scale + ')',
+      transform: 'translate(' + x + 'px, ' + y + 'px) scale(' + scaleX + ',' + scaleY + ')',
     };
   });
   return element.animate(frames, { duration, easing: 'linear', fill: 'backwards' });
@@ -543,6 +575,10 @@ function tileFrame(frame, roomId, x, y) {
 
 function childFrame(frame, childId, host, inset = shellInset, mirrored = Boolean(frame.flipped) !== Boolean((state.flipped ?? map.flipped)[map.rooms[childId].owner])) {
   const tile = tileFrame(frame, host[0], host[1], host[2]);
+  if (map.compressedRooms) return {
+    left: tile.left + tile.width * (1 - inset) / 2, top: tile.top + tile.height * (1 - inset) / 2,
+    width: tile.width * inset, height: tile.height * inset, flipped: mirrored,
+  };
   const room = map.rooms[childId];
   const size = Math.min(tile.width, tile.height) * inset / Math.max(room.width, room.height);
   return {
@@ -555,6 +591,14 @@ function childFrame(frame, childId, host, inset = shellInset, mirrored = Boolean
 function parentFrame(frame, host, inset = shellInset, mirrored = false) {
   const size = Math.max(frame.width, frame.height) / inset;
   const room = map.rooms[host[0]];
+  if (map.compressedRooms) {
+    const width = frame.width / inset, height = frame.height / inset;
+    return {
+      left: frame.left + frame.width / 2 - (mirrored ? room.width - host[1] - .5 : host[1] + .5) * width,
+      top: frame.top + frame.height / 2 - (host[2] + .5) * height,
+      width: room.width * width, height: room.height * height, flipped: mirrored,
+    };
+  }
   return {
     left: frame.left + frame.width / 2 - (mirrored ? room.width - host[1] - .5 : host[1] + .5) * size,
     top: frame.top + frame.height / 2 - (host[2] + .5) * size,
@@ -652,8 +696,8 @@ function boxSprite(entity, mirrored = viewFlipped()) {
     const room = map.rooms[child];
     drawRoomMap(preview, child, Math.ceil(side / Math.max(room.width, room.height)), true, true, null, mirrored !== Boolean((state.flipped ?? map.flipped)[entity]));
     const scale = (side - 12) / Math.max(preview.width, preview.height);
-    const width = preview.width * scale;
-    const height = preview.height * scale;
+    const width = map.compressedRooms ? side - 12 : preview.width * scale;
+    const height = map.compressedRooms ? side - 12 : preview.height * scale;
     context.drawImage(preview, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
   }
   if (map.clones[entity]) {
@@ -961,6 +1005,7 @@ function renderRoom(container, roomId) {
     container.dataset.flipped = mirrored;
     container.style.direction = mirrored ? 'rtl' : 'ltr';
     container.style.setProperty('--columns', room.width);
+    container.style.setProperty('--rows', room.height);
     container.style.setProperty('--longest-side', Math.max(room.width, room.height));
     container.style.setProperty('--room-color', roomColor(roomId));
     container.style.setProperty('--room-floor', floorColor(roomId));
@@ -1084,6 +1129,7 @@ function openLevel(index) {
   board.classList.toggle('reference-chapter', theme === 'reference');
   board.classList.toggle('clone-chapter', theme === 'clone');
   board.classList.toggle('flip-chapter', theme === 'flip');
+  board.classList.toggle('compressed-rooms', map.compressedRooms);
   board.replaceChildren();
   textMaps.replaceChildren();
   displayMode.hidden = !level.textView;

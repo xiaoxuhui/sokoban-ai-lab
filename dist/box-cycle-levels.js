@@ -769,7 +769,8 @@ BoxCampaign.cycle = [
     },
     "flipped": [],
     "portalConversion": true,
-    "sourceFile": "oblong_intro"
+    "sourceFile": "oblong_intro",
+    "compressedRooms": true
   },
   {
     "title": "循环 17",
@@ -808,7 +809,8 @@ BoxCampaign.cycle = [
     },
     "flipped": [],
     "portalConversion": true,
-    "sourceFile": "5by1"
+    "sourceFile": "5by1",
+    "compressedRooms": true
   },
   {
     "title": "循环 18",
@@ -830,6 +832,7 @@ BoxCampaign.cycle = [
     },
     "flipped": [],
     "portalConversion": true,
-    "sourceFile": "7by3ref"
+    "sourceFile": "7by3ref",
+    "compressedRooms": true
   }
 ];
