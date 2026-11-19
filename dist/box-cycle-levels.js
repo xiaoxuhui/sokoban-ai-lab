@@ -378,35 +378,6 @@ BoxCampaign.cycle = [
     "title": "循环 9",
     "hint": "推箱链绕回自身时，整条循环链会同时前移一格。可以转成推箱子的传送门地图。",
     "rows": [
-      "#########",
-      "##     ##",
-      "## r $ ##",
-      "##   $ ##",
-      "## @ $.##",
-      "##    .##",
-      "######.##",
-      "######  #",
-      "######.##"
-    ],
-    "rooms": {},
-    "clones": {},
-    "finish": [
-      7,
-      7
-    ],
-    "finishRoom": "root",
-    "colors": {
-      "root": "#786efa"
-    },
-    "flipped": [],
-    "portalConversion": true,
-    "sourceFile": "cycle_setup",
-    "challenge": true
-  },
-  {
-    "title": "循环 10",
-    "hint": "推箱链绕回自身时，整条循环链会同时前移一格。可以转成推箱子的传送门地图。",
-    "rows": [
       "####d####",
       "####$####",
       "#### ####",
@@ -438,7 +409,37 @@ BoxCampaign.cycle = [
     },
     "flipped": [],
     "portalConversion": true,
-    "sourceFile": "eat_cycle"
+    "sourceFile": "eat_cycle",
+    "challenge": true
+  },
+  {
+    "title": "循环 10",
+    "hint": "推箱链绕回自身时，整条循环链会同时前移一格。可以转成推箱子的传送门地图。",
+    "rows": [
+      "#########",
+      "##     ##",
+      "## r $ ##",
+      "##   $ ##",
+      "## @ $.##",
+      "##    .##",
+      "######.##",
+      "######  #",
+      "######.##"
+    ],
+    "rooms": {},
+    "clones": {},
+    "finish": [
+      7,
+      7
+    ],
+    "finishRoom": "root",
+    "colors": {
+      "root": "#786efa"
+    },
+    "flipped": [],
+    "portalConversion": true,
+    "sourceFile": "cycle_setup",
+    "challenge": true
   },
   {
     "title": "循环 11",

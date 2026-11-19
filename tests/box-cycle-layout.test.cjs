@@ -28,6 +28,8 @@ function setup(level) {
 test('Cycle contains all eighteen numbered original levels', () => {
   assert.equal(levels.length, 18);
   assert.deepEqual(levels.map(level => level.title), Array.from({ length: 18 }, (_, i) => '循环 ' + (i + 1)));
+  assert.equal(levels[8].sourceFile, 'eat_cycle', 'Cycle 9 is the map with a root clone and the box above it');
+  assert.equal(levels[9].sourceFile, 'cycle_setup', 'Cycle 10 is the map with four goals in the right-hand shaft');
 });
 
 for (const [index, level] of levels.entries()) {
