@@ -31,6 +31,7 @@ const chapters = [
   { id: 'open', title: '开放', levels: BoxCampaign.open, color: '#6496e6' },
   { id: 'flip', title: '翻转', levels: BoxCampaign.flip, color: '#786efa' },
   { id: 'cycle', title: '循环', levels: BoxCampaign.cycle, color: '#786efa' },
+  { id: 'player', title: '玩家', levels: BoxCampaign.player, color: '#cbcbce' },
 ];
 const levels = [];
 for (const chapter of chapters) {
@@ -176,21 +177,21 @@ function inspectRoom(roomId, crossing) {
   const owner = crossing?.owner;
   const selfReference = owner >= 0 && map.inside[owner] === state.positions[owner][0];
   const mirrored = owner >= 0 ? viewFlipped() !== (Boolean((state.flipped ?? map.flipped)[owner]) && !selfReference) :
-    roomId === state.positions[0][0] && Boolean(playerViews.get(state));
-  inspectedRoom = roomId === state.positions[0][0] && mirrored === Boolean(playerViews.get(state)) ? null : roomId;
+    roomId === state.positions[state.activePlayer ?? map.players[0]][0] && Boolean(playerViews.get(state));
+  inspectedRoom = roomId === state.positions[state.activePlayer ?? map.players[0]][0] && mirrored === Boolean(playerViews.get(state)) ? null : roomId;
   inspectedFlipped = mirrored;
   render(crossing ? [crossing] : []);
 }
 
 function inspectParent() {
-  const roomId = inspectedRoom ?? state.positions[0][0];
+  const roomId = inspectedRoom ?? state.positions[state.activePlayer ?? map.players[0]][0];
   const parent = parentRoom(roomId);
   if (parent >= 0) inspectRoom(parent, { direction: 'out', owner: map.rooms[roomId].owner });
   else returnToPlayer();
 }
 
 function returnToPlayer() {
-  if (inspectedRoom !== null) inspectRoom(state.positions[0][0]);
+  if (inspectedRoom !== null) inspectRoom(state.positions[state.activePlayer ?? map.players[0]][0]);
 }
 
 function cameraCrossing(crossings, previousRoom, roomId) {
@@ -211,12 +212,15 @@ function cameraCrossing(crossings, previousRoom, roomId) {
 }
 
 function render(crossings = []) {
-  const [playerRoom, x, y] = state.positions[0];
+  const [playerRoom, x, y] = state.positions[state.activePlayer ?? map.players[0]];
   const inspecting = inspectedRoom !== null;
   const roomId = inspectedRoom ?? playerRoom;
   const showText = textView && !inspecting;
   const covered = placed(map, state);
   const solved = won(map, state, covered);
+  $('intro-player-mode').value = state.playerMode ?? map.playerMode;
+  $('intro-active-player').value = String(state.activePlayer ?? map.players[0]);
+  $('intro-active-player').disabled = (state.playerMode ?? map.playerMode) === 'sync';
   renderScene(roomId, cameraCrossing(crossings, Number(board.dataset.room), roomId), showText);
   if (showText) renderTextMaps(playerRoom);
   updateRecursiveZoom(roomId);
@@ -286,18 +290,17 @@ function renderTextMaps(playerRoom) {
       }
       button.append(label, lines);
       button.addEventListener('click', () => {
-        if (state.positions[0][0] !== roomId) inspectRoom(roomId);
+        if (state.positions[state.activePlayer ?? map.players[0]][0] !== roomId) inspectRoom(roomId);
       });
       textMaps.append(button);
     }
   }
   const glyphs = map.rooms.map(room => Array.from(room.tiles, tile => tile === '#' ? '#' : '.'));
   for (const [room, x, y] of map.goals) glyphs[room][y * map.rooms[room].width + x] = '_';
-  const [finishRoom, finishX, finishY] = map.finish;
-  glyphs[finishRoom][finishY * map.rooms[finishRoom].width + finishX] = '=';
+  for (const [finishRoom, finishX, finishY] of map.finishes) glyphs[finishRoom][finishY * map.rooms[finishRoom].width + finishX] = '=';
   state.positions.forEach(([room, x, y], entity) => {
     const child = map.inside[entity];
-    glyphs[room][y * map.rooms[room].width + x] = entity === 0 ? 'p' : child >= 0 ? String(child + 1) : 'b';
+    glyphs[room][y * map.rooms[room].width + x] = map.players.includes(entity) ? 'p' : child >= 0 ? String(child + 1) : 'b';
   });
   const cloneCells = new Set(state.positions.flatMap(([room, x, y], entity) =>
     map.clones[entity] ? [room + ':' + (y * map.rooms[room].width + x)] : []));
@@ -410,7 +413,7 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
       const px = left + x * cellSize, py = top + y * cellSize;
       const inset = Math.min(1, cellSize * .1);
       const side = cellSize - inset * 2;
-      context.fillStyle = entity === 0 ? playerColor : child >= 0 ? roomColor(child) : crateColor;
+      context.fillStyle = map.players.includes(entity) ? playerColor : child >= 0 ? roomColor(child) : crateColor;
       context.fillRect(px + inset, py + inset, side, side);
       // Repeat shared and self-referencing rooms only while their contents are visible.
       if (nested && child >= 0 && side >= 3 && depth < 12) {
@@ -432,14 +435,13 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
         context.strokeRect(px + inset, py + inset, side, side);
         context.setLineDash([]);
       }
-      if (entity === 0) drawRoomEyes(context, px, py, cellSize, '#651914');
+      if (map.players.includes(entity)) drawRoomEyes(context, px, py, cellSize, '#651914');
     }
     for (const [goalRoom, x, y] of map.goals) {
       if (goalRoom === id) drawTargetOutline(context, left + x * cellSize, top + y * cellSize, cellSize);
     }
-    const [finishRoom, finishX, finishY] = map.finish;
-    if (showFinish && finishRoom === id) {
-      const playerOnFinish = pieces.some(([entity, x, y]) => entity === 0 && x === finishX && y === finishY);
+    for (const [finishRoom, finishX, finishY] of map.finishes) if (showFinish && finishRoom === id) {
+      const playerOnFinish = pieces.some(([entity, x, y]) => map.players.includes(entity) && x === finishX && y === finishY);
       drawFinish(context, left + finishX * cellSize, top + finishY * cellSize, cellSize, playerOnFinish);
     }
     context.restore();
@@ -704,6 +706,7 @@ function boxSprite(entity, mirrored = viewFlipped()) {
     context.fillStyle = 'rgba(255,255,255,.22)';
     context.fillRect(edge, edge, side, side);
   }
+  if (map.players.includes(entity)) drawRoomEyes(context, edge, edge, side, '#651914');
   return canvas;
 }
 
@@ -721,7 +724,7 @@ function prepareBoxMotion(next, transfers, crossings = []) {
   const sprites = [];
   const now = performance.now();
   if (!reduceMotion.matches && !textView && inspectedRoom === null &&
-      state.positions[0][0] === next.positions[0][0] && !crossings.length) {
+      state.positions[state.activePlayer ?? map.players[0]][0] === next.positions[next.activePlayer ?? map.players[0]][0] && !crossings.length) {
     const groups = new Map();
     for (const transfer of transfers) {
       if (!groups.has(transfer.entity)) groups.set(transfer.entity, []);
@@ -899,7 +902,7 @@ function paintRecursiveZoom(time) {
   const size = zoomAtProgress(cover, cover / scale, progress);
   zoom.layers = [];
   const [finishRoom, finishX, finishY] = map.finish;
-  const [playerRoom, playerX, playerY] = state.positions[0];
+  const [playerRoom, playerX, playerY] = state.positions[state.activePlayer ?? map.players[0]];
   const playerOnFinish = playerRoom === finishRoom && playerX === finishX && playerY === finishY;
 
   function paintRoom(roomId, cx, cy, size, container) {
@@ -1026,28 +1029,28 @@ function renderRoom(container, roomId) {
     }));
   }
   const goalCells = new Set(map.goals.filter(([id]) => id === roomId).map(([, x, y]) => y * room.width + x));
-  const finishCell = map.finish[0] === roomId ? map.finish[2] * room.width + map.finish[1] : -1;
+  const finishCells = new Set(map.finishes.filter(([id]) => id === roomId).map(([, x, y]) => y * room.width + x));
   const occupied = new Map();
   state.positions.forEach(([id, x, y], entity) => { if (id === roomId) occupied.set(y * room.width + x, entity); });
   for (const [index, cell] of Array.from(container.children).entries()) {
     if (room.tiles[index] === '#') continue;
     const entity = occupied.get(index);
     const child = entity === undefined ? -1 : map.inside[entity];
-    const crate = entity > 0;
+    const isPlayer = map.players.includes(entity);
+    const crate = entity !== undefined && !isPlayer;
     cell.style.setProperty('--box-visibility', hiddenBoxes.has(entity) ? 'hidden' : 'visible');
     const goal = goalCells.has(index);
-    const signature = (entity ?? '') + ':' + Number(goal) + ':' + Number(index === finishCell);
+    const signature = (entity ?? '') + ':' + Number(goal) + ':' + Number(finishCells.has(index));
     if (cell.dataset.tile !== signature) {
       cell.dataset.tile = signature;
       cell.replaceChildren();
       if (goal && !crate) addPiece(cell, 'goal');
-      if (index === finishCell && !crate) addPiece(cell, 'intro-player-goal');
-      if (entity === 0) addPiece(cell, 'player');
-      else if (child >= 0) {
+      if (finishCells.has(index) && !crate) addPiece(cell, 'intro-player-goal');
+      if (child >= 0) {
         const button = document.createElement('button');
         button.type = 'button';
         button.dataset.shell = entity;
-        button.className = 'room-box' + (goal ? ' room-on-goal' : '') + (map.clones[entity] ? ' room-clone' : '');
+        button.className = 'room-box' + (isPlayer ? ' room-player' : '') + (goal ? ' room-on-goal' : '') + (map.clones[entity] ? ' room-clone' : '');
         button.style.setProperty('--box-color', roomColor(child));
         button.setAttribute('aria-label', child === roomId ? '查看小箱子里的同一张棋盘' :
           '查看第 ' + (mirrored ? room.width - index % room.width : index % room.width + 1) + ' 列第 ' + (Math.floor(index / room.width) + 1) + ' 行的箱内房间');
@@ -1058,7 +1061,8 @@ function renderRoom(container, roomId) {
         button.append(document.createElement('canvas'));
         button.addEventListener('click', () => inspectRoom(child, { direction: 'in', owner: entity }));
         cell.append(button);
-      } else if (crate) addPiece(cell, goal ? 'crate placed' : 'crate');
+      } else if (isPlayer) addPiece(cell, 'player');
+      else if (crate) addPiece(cell, goal ? 'crate placed' : 'crate');
     }
     if (child >= 0) {
       const canvas = cell.querySelector('canvas');
@@ -1103,7 +1107,7 @@ function openLevel(index) {
     $('intro-levels').replaceChildren(...levelButtons);
   }
   const theme = chapters[nextChapter].id;
-  map = compile({ ...level, eat: ['eat', 'reference', 'swap', 'center', 'clone', 'transfer', 'open', 'flip', 'cycle'].includes(theme), allowCycles: ['reference', 'swap', 'center', 'clone', 'transfer', 'open', 'flip', 'cycle'].includes(theme), transfer: theme === 'transfer' });
+  map = compile({ ...level, eat: ['eat', 'reference', 'swap', 'center', 'clone', 'transfer', 'open', 'flip', 'cycle', 'player'].includes(theme), allowCycles: ['reference', 'swap', 'center', 'clone', 'transfer', 'open', 'flip', 'cycle', 'player'].includes(theme), transfer: theme === 'transfer' });
   $('intro-convert').hidden = map.transfer || !map.portalConversion;
   $('intro-convert').disabled = map.transfer || !map.portalConversion;
   const now = performance.now();
@@ -1117,6 +1121,11 @@ function openLevel(index) {
   zoomCanvas.hidden = !recursiveZoom;
   zoomButton.hidden = !recursiveZoom;
   state = map.initial;
+  $('intro-player-options').hidden = map.players.length < 2;
+  $('intro-player-mode').value = map.playerMode;
+  $('intro-active-player').replaceChildren(...map.players.map((id, index) => {
+    const option = document.createElement('option'); option.value = id; option.textContent = '玩家 ' + (index + 1); return option;
+  }));
   playerViews.set(state, false);
   history = [];
   future = [];
@@ -1214,7 +1223,7 @@ zoomButton.addEventListener('click', () => {
     recursiveZoom.started += now - recursiveZoom.pausedAt;
     recursiveZoom.pausedAt = null;
   }
-  updateRecursiveZoom(inspectedRoom ?? state.positions[0][0]);
+  updateRecursiveZoom(inspectedRoom ?? state.positions[state.activePlayer ?? map.players[0]][0]);
 });
 zoomCanvas.addEventListener('click', event => {
   const bounds = zoomCanvas.getBoundingClientRect();
@@ -1222,7 +1231,7 @@ zoomCanvas.addEventListener('click', event => {
   const y = event.clientY - bounds.top;
   const layer = recursiveZoom.layers.findLast(layer => x >= layer.left && x < layer.right &&
     y >= layer.top && y < layer.bottom);
-  const viewed = inspectedRoom ?? state.positions[0][0];
+  const viewed = inspectedRoom ?? state.positions[state.activePlayer ?? map.players[0]][0];
   if (layer?.container?.roomId === viewed) {
     inspectRoom(layer.roomId, { direction: 'in', owner: layer.container.owner });
   } else if (layer?.roomId !== viewed) inspectParent();
@@ -1239,6 +1248,15 @@ for (const button of moveButtons) button.addEventListener('click', () => move(Nu
 $('intro-undo').addEventListener('click', undo);
 $('intro-redo').addEventListener('click', redo);
 $('intro-reset').addEventListener('click', () => applyState(map.initial));
+$('intro-player-mode').addEventListener('change', event => {
+  state = { ...state, playerMode: event.target.value, crossings: [], transfers: [] };
+  $('intro-active-player').disabled = event.target.value === 'sync';
+  render();
+});
+$('intro-active-player').addEventListener('change', event => {
+  state = { ...state, activePlayer: Number(event.target.value), crossings: [], transfers: [] };
+  inspectedRoom = null; playerViews.set(state, false); clearRoomMotion(); clearBoxMotion(); render();
+});
 $('intro-next').addEventListener('click', () => {
   if (won(map, state) && active + 1 < levels.length) openLevel(active + 1);
 });

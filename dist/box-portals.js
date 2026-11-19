@@ -30,7 +30,7 @@
     for (const [id, position] of state.positions.entries()) {
       const cell = key(...location(position));
       const goal = tiles.get(cell) === '.';
-      tiles.set(cell, id === 0 ? (goal ? '+' : '@') : (goal ? '*' : '$'));
+      tiles.set(cell, map.players.includes(id) ? (goal ? '+' : '@') : (goal ? '*' : '$'));
     }
     for (const [roomId, room] of map.rooms.entries()) {
       if (room.owner < 0) continue;
@@ -63,7 +63,7 @@
       }
     }
     // Clone faces are entrances only. Every exit still belongs to the original shell.
-    for (let entity = 1; entity < state.positions.length; entity++) {
+    for (let entity = 0; entity < state.positions.length; entity++) {
       if (!map.clones?.[entity]) continue;
       if (map.rooms[state.positions[entity][0]].void) continue;
       const roomId = map.inside[entity];
@@ -91,6 +91,11 @@
       portals,
       portalGeometry,
       finish: location(map.finish),
+      ...(map.players.length > 1 || map.players.some(id => map.inside[id] >= 0) ? {
+        players: map.players.map(id => location(state.positions[id])),
+        finishes: map.finishes.map(location),
+        playerMode: (state.playerMode ?? map.playerMode) === 'single' && map.players.length > 1 ? 'select' : state.playerMode ?? map.playerMode,
+      } : {}),
     };
   }
 

@@ -16,7 +16,9 @@
     const clones = [false];
     const flipped = [false];
     const positions = [null];
+    const glyphPlayers = [];
     const goals = [];
+    const finishes = level.finishes?.map(([name, x, y]) => [roomIds.get(name), x, y]);
     let finish = level.finish ? [roomIds.get(level.finishRoom ?? 'root'), ...level.finish] : null;
     for (const [roomId, room] of rooms.entries()) {
       for (let cell = 0; cell < room.tiles.length; cell++) {
@@ -32,8 +34,8 @@
         if (symbol === '.' || symbol === '*') goals.push(position);
         if (symbol === 'p' || symbol === 'P') finish = position;
         if (symbol === '@' || symbol === 'P') {
-          if (positions[0]) throw Error('关卡只能有一个玩家。');
-          positions[0] = position;
+          if (!positions[0]) { positions[0] = position; glyphPlayers.push(0); }
+          else { glyphPlayers.push(positions.length); inside.push(-1); clones.push(false); flipped.push(false); positions.push(position); }
         } else if (symbol === '$' || symbol === '*' || child >= 0) {
           if (child >= 0 && symbol !== name) goals.push(position);
           if (child >= 0 && !isClone) {
@@ -49,11 +51,27 @@
         }
       }
     }
+    let players = level.players?.map(([name, x, y]) => positions.findIndex(p => p && matches(p, roomIds.get(name), x, y))) ?? glyphPlayers;
+    if (level.players && players.some(id => id < 0)) throw Error('玩家必须位于可移动的方块上。');
+    if (positions[0] && players[0] > 0) {
+      const primary = players[0];
+      for (const values of [positions, inside, clones, flipped]) [values[0], values[primary]] = [values[primary], values[0]];
+      const remap = id => id === primary ? 0 : id === 0 ? primary : id;
+      players = players.map(remap);
+      rooms.forEach(room => { room.owner = remap(room.owner); });
+    } else if (!positions[0] && players[0] > 0) {
+      const primary = players[0];
+      for (const values of [positions, inside, clones, flipped]) { values[0] = values[primary]; values.splice(primary, 1); }
+      const remap = id => id === primary ? 0 : id > primary ? id - 1 : id;
+      players = players.map(remap);
+      rooms.forEach(room => { room.owner = remap(room.owner); });
+    }
     if (!positions[0] || !finish || rooms.slice(1).some(room => room.owner < 0)) throw Error('请检查房间和玩家终点。');
     return {
       rooms, inside, clones, flipped, goals, finish, eat: Boolean(level.eat), allowCycles: Boolean(level.allowCycles), transfer: Boolean(level.transfer),
       portalConversion: level.portalConversion !== false,
       compressedRooms: Boolean(level.compressedRooms),
+      players, finishes: finishes ?? [finish], playerMode: level.playerMode ?? 'sync',
       conversionReason: level.conversionReason ?? '当前关卡的规则暂不支持转成传送门地图。',
       initial: { positions, flipped: flipped.slice(), moves: 0, pushes: 0 },
     };
@@ -62,14 +80,29 @@
   const matches = (position, room, x, y) => position[0] === room && position[1] === x && position[2] === y;
 
   function placed(map, state) {
-    return map.goals.filter(([room, x, y]) => state.positions.some((position, id) => id > 0 && matches(position, room, x, y))).length;
+    return map.goals.filter(([room, x, y]) => state.positions.some((position, id) => !map.players.includes(id) && matches(position, room, x, y))).length;
   }
 
   function won(map, state, covered = placed(map, state)) {
-    return matches(state.positions[0], ...map.finish) && covered === map.goals.length;
+    return map.finishes.every(goal => map.players.some(id => matches(state.positions[id], ...goal))) && covered === map.goals.length;
   }
 
   function step(map, state, direction) {
+    if (typeof direction === 'string' && /^P[1-9]\d*$/.test(direction)) {
+      const player = map.players[Number(direction.slice(1)) - 1];
+      return player === undefined || player === (state.activePlayer ?? map.players[0]) ? state : { ...state, activePlayer: player, crossings: [], transfers: [] };
+    }
+    const players = (state.playerMode ?? map.playerMode) === 'single' ? [state.activePlayer ?? map.players[0]] : map.players;
+    let next = state;
+    const crossings = [], transfers = [];
+    for (const player of players) {
+      const moved = movePlayer(map, next, direction, player, state.activePlayer ?? map.players[0]);
+      if (moved !== next) { crossings.push(...moved.crossings); transfers.push(...moved.transfers); next = moved; }
+    }
+    return next === state ? state : { ...next, moves: state.moves + 1, pushes: state.pushes + Number(next.pushes > state.pushes), crossings, transfers };
+  }
+
+  function movePlayer(map, state, direction, player, focus) {
     if (!directions[direction]) return state;
     const positions = state.positions.slice();
     const flipped = (state.flipped ?? map.flipped).slice();
@@ -126,7 +159,7 @@
         }
         if (room.owner < 0 || room.owner === entity || exited.has(roomId)) return false;
         exited.add(roomId);
-        if (entity === 0) crossings.push({ direction: 'out', owner: room.owner, room: roomId, host: positions[room.owner], flipped: flipped[room.owner] });
+        if (entity === focus) crossings.push({ direction: 'out', owner: room.owner, room: roomId, host: positions[room.owner], flipped: flipped[room.owner] });
         else transfers.push({ entity, direction: 'out', room: roomId, owner: room.owner, host: positions[room.owner], flipped: flipped[room.owner] });
         offset = horizontal ? (y + offset) / room.height : (x + offset) / room.width;
         if (flipped[room.owner]) {
@@ -155,7 +188,7 @@
       const scaled = offset * (horizontal ? child.height : child.width);
       // A face's exact centre selects the upper row on even-height rooms.
       const lane = map.transfer && horizontal ? Math.max(0, Math.ceil(scaled) - 1) : Math.floor(scaled);
-      if (entity === 0) crossings.push({ direction: 'in', owner, room: childId, host: positions[owner], flipped: flipped[owner] });
+      if (entity === focus) crossings.push({ direction: 'in', owner, room: childId, host: positions[owner], flipped: flipped[owner] });
       else transfers.push({ entity, direction: 'in', room: childId, owner, host: positions[owner], flipped: flipped[owner] });
       const moved = land(entity, childId, horizontal ? (dx > 0 ? 0 : child.width - 1) : lane,
         horizontal ? lane : (dy > 0 ? 0 : child.height - 1), scaled - lane, heading, entered);
@@ -190,7 +223,7 @@
       return true;
     }
 
-    if (!moveEntity(0, 0.5, direction)) return state;
+    if (!moveEntity(player, 0.5, direction)) return state;
     // Only the closed part of the chain rotates. A pusher outside that loop
     // keeps its cell; otherwise it would overlap the box returning behind it.
     if (cycleMembers) {
@@ -198,11 +231,11 @@
         positions[id] = state.positions[id];
         flipped[id] = (state.flipped ?? map.flipped)[id];
       }
-      if (!cycleMembers.has(0)) crossings.length = 0;
+      if (!cycleMembers.has(focus)) crossings.length = 0;
       for (let i = transfers.length - 1; i >= 0; i--) if (!cycleMembers.has(transfers[i].entity)) transfers.splice(i, 1);
     }
-    const pushed = positions.some((position, index) => index > 0 && position !== state.positions[index]);
-    return { positions, flipped, moves: state.moves + 1, pushes: state.pushes + Number(pushed), crossings, transfers };
+    const pushed = positions.some((position, index) => index !== player && position !== state.positions[index]);
+    return { ...state, positions, flipped, moves: state.moves + 1, pushes: state.pushes + Number(pushed), crossings, transfers };
   }
 
   const api = { compile, placed, step, won };
