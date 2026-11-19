@@ -769,8 +769,7 @@ BoxCampaign.cycle = [
     },
     "flipped": [],
     "portalConversion": true,
-    "sourceFile": "oblong_intro",
-    "textView": true
+    "sourceFile": "oblong_intro"
   },
   {
     "title": "循环 17",
@@ -809,8 +808,7 @@ BoxCampaign.cycle = [
     },
     "flipped": [],
     "portalConversion": true,
-    "sourceFile": "5by1",
-    "textView": true
+    "sourceFile": "5by1"
   },
   {
     "title": "循环 18",
@@ -832,7 +830,6 @@ BoxCampaign.cycle = [
     },
     "flipped": [],
     "portalConversion": true,
-    "sourceFile": "7by3ref",
-    "textView": true
+    "sourceFile": "7by3ref"
   }
 ];
