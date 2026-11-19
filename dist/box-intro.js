@@ -46,6 +46,7 @@ const returnButton = $('intro-return');
 const parentButton = $('intro-view-parent');
 const moveButtons = document.querySelectorAll('[data-move]');
 const roomMaps = new WeakMap();
+const playerViews = new WeakMap();
 let previewContents;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const zoomCanvas = $('intro-recursive-view');
@@ -68,6 +69,7 @@ let history = [];
 let future = [];
 let textView = false;
 let inspectedRoom = null;
+let inspectedFlipped = false;
 let roomMotion;
 let recursiveZoom;
 let routeInput;
@@ -133,13 +135,29 @@ function roomLabel(roomId) {
 }
 
 function viewFlipped() {
-  // Mirror state belongs to the boxes and their entrances; keep the board upright.
-  return false;
+  return inspectedRoom === null ? Boolean(playerViews.get(state)) : inspectedFlipped;
+}
+
+function viewAfterCrossings(previous, next) {
+  let mirrored = Boolean(playerViews.get(previous));
+  for (const crossing of next.crossings ?? []) {
+    const room = crossing.room ?? map.inside[crossing.owner];
+    const hostRoom = crossing.host?.[0] ?? next.positions[crossing.owner][0];
+    const selfExit = crossing.direction === 'out' && room === hostRoom;
+    const flipped = crossing.flipped ?? (previous.flipped ?? map.flipped)[crossing.owner];
+    if (flipped && !selfExit) mirrored = !mirrored;
+  }
+  return mirrored;
 }
 
 function inspectRoom(roomId, crossing) {
   clearBoxMotion();
-  inspectedRoom = roomId === state.positions[0][0] ? null : roomId;
+  const owner = crossing?.owner;
+  const selfExit = crossing?.direction === 'out' && map.inside[owner] === state.positions[owner][0];
+  const mirrored = owner >= 0 ? viewFlipped() !== (Boolean((state.flipped ?? map.flipped)[owner]) && !selfExit) :
+    roomId === state.positions[0][0] && Boolean(playerViews.get(state));
+  inspectedRoom = roomId === state.positions[0][0] && mirrored === Boolean(playerViews.get(state)) ? null : roomId;
+  inspectedFlipped = mirrored;
   render(crossing ? [crossing] : []);
 }
 
@@ -851,7 +869,8 @@ function paintRecursiveZoom(time) {
 
 function renderScene(roomId, crossing, showText) {
   const sameRoom = board.children.length > 0 && Number(board.dataset.room) === roomId;
-  const animate = crossing && !sameRoom && !showText && !reduceMotion.matches;
+  const selfExit = sameRoom && crossing?.direction === 'out';
+  const animate = crossing && !selfExit && !showText && !reduceMotion.matches;
   const entering = crossing?.direction === 'in';
   const shell = crossing?.owner >= 0 ? '[data-shell="' + crossing.owner + '"]' : null;
   let oldFrame, oldShell, returningFrame, ghost;
@@ -995,6 +1014,7 @@ function openLevel(index) {
   clearRoomMotion();
   if (recursiveZoom) cancelAnimationFrame(recursiveZoom.frame);
   inspectedRoom = null;
+  inspectedFlipped = false;
   active = index;
   const level = levels[index];
   const nextChapter = chapters.findLastIndex(chapter => index >= chapter.start);
@@ -1032,6 +1052,7 @@ function openLevel(index) {
   zoomCanvas.hidden = !recursiveZoom;
   zoomButton.hidden = !recursiveZoom;
   state = map.initial;
+  playerViews.set(state, false);
   history = [];
   future = [];
   $('intro-title').textContent = '第 ' + (active - chapters[chapterIndex].start + 1) + ' 关 · ' + level.title;
@@ -1053,11 +1074,13 @@ function openLevel(index) {
 
 function move(direction) {
   if (inspectedRoom !== null || won(map, state)) return;
+  if (viewFlipped() && direction % 2) direction ^= 2;
   applyState(step(map, state, direction));
 }
 
 function applyState(next) {
   if (next === state) return;
+  playerViews.set(next, next === map.initial ? false : viewAfterCrossings(state, next));
   const prepared = prepareBoxMotion(next, next.transfers ?? [], next.crossings ?? []);
   history.push(state);
   future = [];
