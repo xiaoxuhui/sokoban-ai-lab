@@ -374,6 +374,8 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
           py + (cellSize - inner.height * scale) / 2, scale, depth + 1, (state.flipped ?? map.flipped)[entity]);
       }
       if (map.clones[entity]) {
+        context.fillStyle = 'rgba(255,255,255,.22)';
+        context.fillRect(px + inset, py + inset, side, side);
         context.strokeStyle = '#e9f3ff';
         context.lineWidth = cellSize * .08;
         context.setLineDash([cellSize * .18, cellSize * .12]);
@@ -619,6 +621,10 @@ function boxSprite(entity, mirrored = viewFlipped()) {
     const height = preview.height * scale;
     context.drawImage(preview, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
   }
+  if (map.clones[entity]) {
+    context.fillStyle = 'rgba(255,255,255,.22)';
+    context.fillRect(edge, edge, side, side);
+  }
   return canvas;
 }
 
@@ -848,7 +854,8 @@ function paintRecursiveZoom(time) {
 }
 
 function renderScene(roomId, crossing, showText) {
-  const animate = crossing && !showText && !reduceMotion.matches;
+  const sameRoom = board.children.length > 0 && Number(board.dataset.room) === roomId;
+  const animate = crossing && !sameRoom && !showText && !reduceMotion.matches;
   const entering = crossing?.direction === 'in';
   const shell = crossing?.owner >= 0 ? '[data-shell="' + crossing.owner + '"]' : null;
   let oldFrame, oldShell, returningFrame, ghost;
