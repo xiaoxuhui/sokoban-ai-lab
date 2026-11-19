@@ -14,6 +14,7 @@
     });
     const inside = [-1];
     const clones = [false];
+    const flipped = [false];
     const positions = [null];
     const goals = [];
     let finish = level.finish ? [roomIds.get(level.finishRoom ?? 'root'), ...level.finish] : null;
@@ -41,6 +42,7 @@
           }
           inside.push(child);
           clones.push(isClone);
+          flipped.push(Boolean(level.flipped?.includes(isClone ? name : target)));
           positions.push(position);
         } else if (symbol !== ' ' && symbol !== '#' && symbol !== '.' && symbol !== 'p') {
           throw Error('未知的关卡方块 ' + symbol);
@@ -49,7 +51,7 @@
     }
     if (!positions[0] || !finish || rooms.slice(1).some(room => room.owner < 0)) throw Error('请检查房间和玩家终点。');
     return {
-      rooms, inside, clones, goals, finish, eat: Boolean(level.eat), allowCycles: Boolean(level.allowCycles), transfer: Boolean(level.transfer),
+      rooms, inside, clones, flipped, goals, finish, eat: Boolean(level.eat), allowCycles: Boolean(level.allowCycles), transfer: Boolean(level.transfer),
       portalConversion: level.portalConversion !== false,
       initial: { positions, moves: 0, pushes: 0 },
     };
@@ -97,10 +99,10 @@
     }
 
     function advance(entity, [roomId, x, y], offset, heading) {
-      const [dx, dy] = directions[heading];
-      const horizontal = dx !== 0;
       const exited = new Set();
       while (true) {
+        const [dx, dy] = directions[heading];
+        const horizontal = dx !== 0;
         const room = map.rooms[roomId];
         const nextX = x + dx;
         const nextY = y + dy;
@@ -112,6 +114,10 @@
         if (entity === 0) crossings.push({ direction: 'out', owner: room.owner });
         else transfers.push({ entity, direction: 'out', room: roomId, owner: room.owner, host: positions[room.owner] });
         offset = horizontal ? (y + offset) / room.height : (x + offset) / room.width;
+        if (map.flipped[room.owner]) {
+          if (horizontal) heading ^= 2;
+          else offset = 1 - offset;
+        }
         [roomId, x, y] = positions[room.owner];
       }
     }
@@ -121,6 +127,10 @@
       if (map.rooms[positions[entity][0]].void) return false;
       if (owner === entity || childId < 0 || entered.has(owner)) return false;
       entered.add(owner);
+      if (map.flipped[owner]) {
+        if (heading % 2) heading ^= 2;
+        else offset = 1 - offset;
+      }
       const [dx, dy] = directions[heading];
       const horizontal = dx !== 0;
       const child = map.rooms[childId];

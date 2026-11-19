@@ -29,6 +29,7 @@ const chapters = [
   { id: 'clone', title: '克隆', levels: BoxCampaign.clone, color: '#8caad2' },
   { id: 'transfer', title: '转移', levels: BoxCampaign.transfer, color: '#5a8cdc' },
   { id: 'open', title: '开放', levels: BoxCampaign.open, color: '#6496e6' },
+  { id: 'flip', title: '翻转', levels: BoxCampaign.flip, color: '#786efa' },
 ];
 const levels = [];
 for (const chapter of chapters) {
@@ -296,7 +297,7 @@ function drawFinish(context, left, top, size, playerOnFinish) {
   if (!playerOnFinish) drawRoomEyes(context, left, top, size, finishColor);
 }
 
-function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true, viewport = null) {
+function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true, viewport = null, flipped = false) {
   const room = map.rooms[roomId];
   const hidden = [...hiddenBoxes].join(',');
   if (previewContents?.map !== map || previewContents.positions !== state.positions || previewContents.hidden !== hidden) {
@@ -309,8 +310,8 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
   const cached = roomMaps.get(canvas);
   const view = viewport ? JSON.stringify(viewport) : '';
   if (cached?.contents === previewContents && cached.roomId === roomId && cached.size === size &&
-      cached.showFinish === showFinish && cached.nested === nested && cached.view === view) return;
-  roomMaps.set(canvas, { contents: previewContents, roomId, size, showFinish, nested, view });
+      cached.showFinish === showFinish && cached.nested === nested && cached.view === view && cached.flipped === flipped) return;
+  roomMaps.set(canvas, { contents: previewContents, roomId, size, showFinish, nested, view, flipped });
   canvas.width = viewport?.width ?? Math.ceil(room.width * size);
   canvas.height = viewport?.height ?? Math.ceil(room.height * size);
   const context = canvas.getContext('2d');
@@ -320,19 +321,31 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
     map.eat ? '#d260bd' : emptyChapter ? '#db562f' : '#df328d';
   const crateColor = cloneChapter ? '#468cfa' : map.eat ? '#ffdc72' : emptyChapter ? '#add444' : board.classList.contains('blue-crates') ? '#38bce8' : '#ffb63a';
 
-  function paint(id, left, top, cellSize, depth) {
+  function paint(id, left, top, cellSize, depth, mirrored = false) {
     const room = map.rooms[id];
-    if (left >= canvas.width || top >= canvas.height ||
-        left + room.width * cellSize <= 0 || top + room.height * cellSize <= 0) return;
+    const transform = context.getTransform();
+    const x1 = transform.a * left + transform.e;
+    const x2 = transform.a * (left + room.width * cellSize) + transform.e;
+    if (Math.min(x1, x2) >= canvas.width || top >= canvas.height ||
+        Math.max(x1, x2) <= 0 || top + room.height * cellSize <= 0) return;
+    context.save();
+    if (mirrored) {
+      context.translate(left * 2 + room.width * cellSize, 0);
+      context.scale(-1, 1);
+    }
     const pieces = previewContents.pieces[id];
     context.fillStyle = floorColor(id);
     context.fillRect(left, top, room.width * cellSize, room.height * cellSize);
     context.fillStyle = roomColor(id);
+    const wallTransform = context.getTransform();
     for (let i = 0; i < room.tiles.length; i++) {
       if (room.tiles[i] !== '#') continue;
       const x = i % room.width, y = Math.floor(i / room.width);
-      const x0 = Math.round(left + x * cellSize), y0 = Math.round(top + y * cellSize);
-      context.fillRect(x0, y0, Math.round(left + (x + 1) * cellSize) - x0,
+      const x0 = Math.round(wallTransform.a * (left + x * cellSize) + wallTransform.e);
+      const x1 = Math.round(wallTransform.a * (left + (x + 1) * cellSize) + wallTransform.e);
+      const y0 = Math.round(top + y * cellSize);
+      const localX = Math.min((x0 - wallTransform.e) / wallTransform.a, (x1 - wallTransform.e) / wallTransform.a);
+      context.fillRect(localX, y0, Math.abs(x1 - x0),
         Math.round(top + (y + 1) * cellSize) - y0);
     }
     for (const [entity, x, y] of pieces) {
@@ -347,7 +360,7 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
         const inner = map.rooms[child];
         const scale = side / Math.max(inner.width, inner.height);
         paint(child, px + (cellSize - inner.width * scale) / 2,
-          py + (cellSize - inner.height * scale) / 2, scale, depth + 1);
+          py + (cellSize - inner.height * scale) / 2, scale, depth + 1, map.flipped[entity]);
       }
       if (map.clones[entity]) {
         context.strokeStyle = '#e9f3ff';
@@ -366,10 +379,11 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
       const playerOnFinish = pieces.some(([entity, x, y]) => entity === 0 && x === finishX && y === finishY);
       drawFinish(context, left + finishX * cellSize, top + finishY * cellSize, cellSize, playerOnFinish);
     }
+    context.restore();
   }
   if (viewport?.layers) {
-    for (const layer of viewport.layers) paint(layer.roomId, layer.left, layer.top, layer.size, 0);
-  } else paint(roomId, viewport?.left ?? 0, viewport?.top ?? 0, size, 0);
+    for (const layer of viewport.layers) paint(layer.roomId, layer.left, layer.top, layer.size, 0, layer.flipped);
+  } else paint(roomId, viewport?.left ?? 0, viewport?.top ?? 0, size, 0, flipped);
 }
 
 function renderSurround(scene, roomId) {
@@ -388,6 +402,7 @@ function renderSurround(scene, roomId) {
     width: board.clientWidth * ratio, height: board.clientHeight * ratio,
   };
   let current = roomId;
+  let mirrored = false;
   const seen = new Set([current]);
   const layers = [];
   while (true) {
@@ -396,8 +411,9 @@ function renderSurround(scene, roomId) {
     const outer = map.rooms[host[0]];
     const size = Math.max(frame.width, frame.height);
     if (!Number.isFinite(size) || size > Number.MAX_SAFE_INTEGER / Math.max(outer.width, outer.height)) break;
-    frame = parentFrame(frame, host, 1);
-    layers.push({ roomId: host[0], size, left: frame.left, top: frame.top });
+    mirrored = mirrored !== map.flipped[map.rooms[current].owner];
+    frame = parentFrame(frame, host, 1, mirrored);
+    layers.push({ roomId: host[0], size, left: frame.left, top: frame.top, flipped: mirrored });
     current = host[0];
     if (seen.has(current)) break;
     seen.add(current);
@@ -488,11 +504,11 @@ function childFrame(frame, childId, host, inset = shellInset) {
   };
 }
 
-function parentFrame(frame, host, inset = shellInset) {
+function parentFrame(frame, host, inset = shellInset, mirrored = false) {
   const size = Math.max(frame.width, frame.height) / inset;
   const room = map.rooms[host[0]];
   return {
-    left: frame.left + frame.width / 2 - (host[1] + .5) * size,
+    left: frame.left + frame.width / 2 - (mirrored ? room.width - host[1] - .5 : host[1] + .5) * size,
     top: frame.top + frame.height / 2 - (host[2] + .5) * size,
     width: room.width * size, height: room.height * size,
   };
@@ -504,11 +520,13 @@ function visibleRoomFrame(roomId, positions, seen = new Set()) {
   const outside = stage.querySelector('.intro-surround');
   if (!outside.hidden) {
     let ancestor = viewRoom, frame = board.getBoundingClientRect();
+    let mirrored = false;
     const ancestors = new Set([ancestor]);
     while (true) {
       const host = positions[map.rooms[ancestor].owner];
       if (!host) break;
-      frame = parentFrame(frame, host, 1);
+      mirrored = mirrored !== map.flipped[map.rooms[ancestor].owner];
+      frame = parentFrame(frame, host, 1, mirrored);
       ancestor = host[0];
       if (ancestor === roomId) return frame;
       if (ancestors.has(ancestor)) break;
@@ -577,7 +595,7 @@ function boxSprite(entity) {
   if (child >= 0) {
     const preview = document.createElement('canvas');
     const room = map.rooms[child];
-    drawRoomMap(preview, child, Math.ceil(side / Math.max(room.width, room.height)));
+    drawRoomMap(preview, child, Math.ceil(side / Math.max(room.width, room.height)), true, true, null, map.flipped[entity]);
     const scale = (side - 12) / Math.max(preview.width, preview.height);
     const width = preview.width * scale;
     const height = preview.height * scale;
@@ -919,6 +937,7 @@ function renderRoom(container, roomId) {
           button.setAttribute('aria-label', '查看复制体里的共享房间，退出时回到本体');
           button.title = '复制体：进入同一房间，退出回到本体';
         }
+        if (map.flipped[entity]) button.title = '镜像箱子：左右出入口相反';
         button.append(document.createElement('canvas'));
         button.addEventListener('click', () => inspectRoom(child, { direction: 'in', owner: entity }));
         cell.append(button);
@@ -929,7 +948,7 @@ function renderRoom(container, roomId) {
       const inner = map.rooms[child];
       const size = Math.max(10, Math.ceil(Math.min(canvas.clientWidth / inner.width,
         canvas.clientHeight / inner.height) * (devicePixelRatio || 1)));
-      drawRoomMap(canvas, child, size);
+      drawRoomMap(canvas, child, size, true, true, null, map.flipped[entity]);
     }
   }
 }
@@ -963,7 +982,7 @@ function openLevel(index) {
     $('intro-levels').replaceChildren(...levelButtons);
   }
   const theme = chapters[nextChapter].id;
-  map = compile({ ...level, eat: ['eat', 'reference', 'swap', 'center', 'clone', 'transfer', 'open'].includes(theme), allowCycles: ['reference', 'swap', 'center', 'clone', 'transfer', 'open'].includes(theme), transfer: theme === 'transfer' });
+  map = compile({ ...level, eat: ['eat', 'reference', 'swap', 'center', 'clone', 'transfer', 'open', 'flip'].includes(theme), allowCycles: ['reference', 'swap', 'center', 'clone', 'transfer', 'open', 'flip'].includes(theme), transfer: theme === 'transfer' });
   $('intro-convert').hidden = map.transfer || !map.portalConversion;
   $('intro-convert').disabled = map.transfer || !map.portalConversion;
   const now = performance.now();

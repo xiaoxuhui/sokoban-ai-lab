@@ -35,7 +35,7 @@
       const owner = location(state.positions[room.owner]);
       for (const [side, [dx, dy]] of directions.entries()) {
         const size = dx ? room.height : room.width;
-        const face = [...owner, side];
+        const face = [...owner, map.flipped?.[room.owner] && dx ? side ^ 2 : side];
         for (let lane = 0; lane < size; lane++) {
           const x = dx ? (dx < 0 ? 0 : room.width - 1) : lane;
           const y = dy ? (dy < 0 ? 0 : room.height - 1) : lane;
@@ -59,7 +59,7 @@
         const x = dx ? (dx < 0 ? 0 : room.width - 1) : lane;
         const y = dy ? (dy < 0 ? 0 : room.height - 1) : lane;
         if (room.tiles[y * room.width + x] === '#') continue;
-        portals.push([[...owner, side], [offsets[roomId] + x + dx, y + dy, side ^ 2], 'one-way']);
+        portals.push([[...owner, map.flipped?.[entity] && dx ? side ^ 2 : side], [offsets[roomId] + x + dx, y + dy, side ^ 2], 'one-way']);
       }
     }
     return {
