@@ -68,7 +68,6 @@ let history = [];
 let future = [];
 let textView = false;
 let inspectedRoom = null;
-let inspectedFlipped = false;
 let roomMotion;
 let recursiveZoom;
 let routeInput;
@@ -134,16 +133,13 @@ function roomLabel(roomId) {
 }
 
 function viewFlipped() {
-  return inspectedRoom === null ? Boolean(state.flipped?.[0]) : inspectedFlipped;
+  // Mirror state belongs to the boxes and their entrances; keep the board upright.
+  return false;
 }
 
 function inspectRoom(roomId, crossing) {
   clearBoxMotion();
-  const flipped = crossing?.owner >= 0 ?
-    viewFlipped() !== Boolean((state.flipped ?? map.flipped)[crossing.owner]) :
-    roomId === state.positions[0][0] && Boolean(state.flipped?.[0]);
-  inspectedRoom = roomId === state.positions[0][0] && flipped === Boolean(state.flipped?.[0]) ? null : roomId;
-  inspectedFlipped = flipped;
+  inspectedRoom = roomId === state.positions[0][0] ? null : roomId;
   render(crossing ? [crossing] : []);
 }
 
@@ -999,7 +995,6 @@ function openLevel(index) {
   clearRoomMotion();
   if (recursiveZoom) cancelAnimationFrame(recursiveZoom.frame);
   inspectedRoom = null;
-  inspectedFlipped = false;
   active = index;
   const level = levels[index];
   const nextChapter = chapters.findLastIndex(chapter => index >= chapter.start);
@@ -1058,7 +1053,6 @@ function openLevel(index) {
 
 function move(direction) {
   if (inspectedRoom !== null || won(map, state)) return;
-  if (viewFlipped() && direction % 2) direction ^= 2;
   applyState(step(map, state, direction));
 }
 
