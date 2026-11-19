@@ -65,7 +65,7 @@ for (const [i, level] of levels.slice(0, 2).entries()) {
 
 // Original level input files use logical directions after crossing a mirror.
 const allRoutes = require('./fixtures/box-flip-routes.json');
-const goalCounts = [1,1,2,1,3,2,0,3,1,2,1,2,1,2,2,1];
+const goalCounts = [1,1,2,1,3,2,0,3,1,2,1,2,1,2,1,2];
 for (const [i, level] of levels.entries()) {
   test(`Flip ${i + 1}: original input route, orientation and immutable history`, () => {
     const map = B.compile({ ...level, eat: true, allowCycles: true });
