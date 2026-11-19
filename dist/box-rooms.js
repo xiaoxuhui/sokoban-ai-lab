@@ -124,7 +124,7 @@
         if (room.owner < 0 || room.owner === entity || exited.has(roomId)) return false;
         exited.add(roomId);
         if (entity === 0) crossings.push({ direction: 'out', owner: room.owner });
-        else transfers.push({ entity, direction: 'out', room: roomId, owner: room.owner, host: positions[room.owner] });
+        else transfers.push({ entity, direction: 'out', room: roomId, owner: room.owner, host: positions[room.owner], flipped: flipped[room.owner] });
         offset = horizontal ? (y + offset) / room.height : (x + offset) / room.width;
         if (flipped[room.owner]) {
           if (horizontal) heading ^= 2;
@@ -153,7 +153,7 @@
       // A face's exact centre selects the upper row on even-height rooms.
       const lane = map.transfer && horizontal ? Math.max(0, Math.ceil(scaled) - 1) : Math.floor(scaled);
       if (entity === 0) crossings.push({ direction: 'in', owner });
-      else transfers.push({ entity, direction: 'in', room: childId, owner, host: positions[owner] });
+      else transfers.push({ entity, direction: 'in', room: childId, owner, host: positions[owner], flipped: flipped[owner] });
       const moved = land(entity, childId, horizontal ? (dx > 0 ? 0 : child.width - 1) : lane,
         horizontal ? lane : (dy > 0 ? 0 : child.height - 1), scaled - lane, heading, entered);
       entered.delete(owner);

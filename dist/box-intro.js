@@ -68,6 +68,7 @@ let history = [];
 let future = [];
 let textView = false;
 let inspectedRoom = null;
+let inspectedFlipped = false;
 let roomMotion;
 let recursiveZoom;
 let routeInput;
@@ -132,9 +133,17 @@ function roomLabel(roomId) {
   return depth ? '箱内第 ' + depth + ' 层' : '外层';
 }
 
+function viewFlipped() {
+  return inspectedRoom === null ? Boolean(state.flipped?.[0]) : inspectedFlipped;
+}
+
 function inspectRoom(roomId, crossing) {
   clearBoxMotion();
-  inspectedRoom = roomId === state.positions[0][0] ? null : roomId;
+  const flipped = crossing?.owner >= 0 ?
+    viewFlipped() !== Boolean((state.flipped ?? map.flipped)[crossing.owner]) :
+    roomId === state.positions[0][0] && Boolean(state.flipped?.[0]);
+  inspectedRoom = roomId === state.positions[0][0] && flipped === Boolean(state.flipped?.[0]) ? null : roomId;
+  inspectedFlipped = flipped;
   render(crossing ? [crossing] : []);
 }
 
@@ -184,7 +193,7 @@ function render(crossings = []) {
   for (const button of moveButtons) button.disabled = inspecting;
   stage.classList.toggle('can-look-out', canLookOut || inspecting);
   board.setAttribute('aria-label', inspecting ? '正在查看' + roomLabel(roomId) :
-    '棋盘，玩家第 ' + (x + 1) + ' 列，第 ' + (y + 1) + ' 行');
+    '棋盘，玩家第 ' + (viewFlipped() ? map.rooms[roomId].width - x : x + 1) + ' 列，第 ' + (y + 1) + ' 行');
   $('intro-count').textContent = state.moves + ' 步 · 推箱 ' + state.pushes + ' 次';
   $('intro-status').textContent = solved ? '通关！' : covered === map.goals.length ?
     '箱子都到位了，走到玩家终点即可通关。' : '箱子到位 ' + covered + ' / ' + map.goals.length;
@@ -404,7 +413,7 @@ function renderSurround(scene, roomId) {
     width: board.clientWidth * ratio, height: board.clientHeight * ratio,
   };
   let current = roomId;
-  let mirrored = false;
+  let mirrored = viewFlipped();
   const seen = new Set([current]);
   const layers = [];
   while (true) {
@@ -492,17 +501,17 @@ function tileFrame(frame, roomId, x, y) {
   const room = map.rooms[roomId];
   const width = frame.width / room.width;
   const height = frame.height / room.height;
-  return { left: frame.left + x * width, top: frame.top + y * height, width, height };
+  return { left: frame.left + (frame.flipped ? room.width - 1 - x : x) * width, top: frame.top + y * height, width, height };
 }
 
-function childFrame(frame, childId, host, inset = shellInset) {
+function childFrame(frame, childId, host, inset = shellInset, mirrored = Boolean(frame.flipped) !== Boolean((state.flipped ?? map.flipped)[map.rooms[childId].owner])) {
   const tile = tileFrame(frame, host[0], host[1], host[2]);
   const room = map.rooms[childId];
   const size = Math.min(tile.width, tile.height) * inset / Math.max(room.width, room.height);
   return {
     left: tile.left + tile.width / 2 - room.width * size / 2,
     top: tile.top + tile.height / 2 - room.height * size / 2,
-    width: room.width * size, height: room.height * size,
+    width: room.width * size, height: room.height * size, flipped: mirrored,
   };
 }
 
@@ -512,17 +521,22 @@ function parentFrame(frame, host, inset = shellInset, mirrored = false) {
   return {
     left: frame.left + frame.width / 2 - (mirrored ? room.width - host[1] - .5 : host[1] + .5) * size,
     top: frame.top + frame.height / 2 - (host[2] + .5) * size,
-    width: room.width * size, height: room.height * size,
+    width: room.width * size, height: room.height * size, flipped: mirrored,
   };
+}
+
+function viewedRoomFrame() {
+  const { left, top, width, height } = board.getBoundingClientRect();
+  return { left, top, width, height, flipped: viewFlipped() };
 }
 
 function visibleRoomFrame(roomId, positions, seen = new Set()) {
   const viewRoom = Number(board.dataset.room);
-  if (roomId === viewRoom) return board.getBoundingClientRect();
+  if (roomId === viewRoom) return viewedRoomFrame();
   const outside = stage.querySelector('.intro-surround');
   if (!outside.hidden) {
-    let ancestor = viewRoom, frame = board.getBoundingClientRect();
-    let mirrored = false;
+    let ancestor = viewRoom, frame = viewedRoomFrame();
+    let mirrored = viewFlipped();
     const ancestors = new Set([ancestor]);
     while (true) {
       const host = positions[map.rooms[ancestor].owner];
@@ -545,7 +559,7 @@ function visibleRoomFrame(roomId, positions, seen = new Set()) {
 
 function sourceBoxFrame(position, positions, route = [], destination = null) {
   if (destination?.[0] === Number(board.dataset.room) && position[0] !== destination[0] && route.length) {
-    let frame = zoomCanvas.hidden ? board.getBoundingClientRect() : sourceBoxFrame(destination, positions);
+    let frame = zoomCanvas.hidden ? viewedRoomFrame() : sourceBoxFrame(destination, positions);
     if (!frame) return null;
     for (const [index, transfer] of route.slice().reverse().entries()) {
       const inverse = { ...transfer, direction: transfer.direction === 'in' ? 'out' : 'in' };
@@ -572,11 +586,12 @@ function sourceBoxFrame(position, positions, route = [], destination = null) {
 function transferFrame(frame, transfer, positions, inset) {
   const currentHost = positions[transfer.owner];
   const host = currentHost[0] === transfer.host[0] ? currentHost : transfer.host;
-  return transfer.direction === 'in' ? childFrame(frame, transfer.room, host, inset) :
-    parentFrame(frame, host, inset);
+  const mirrored = Boolean(frame.flipped) !== Boolean(transfer.flipped ?? (state.flipped ?? map.flipped)[transfer.owner]);
+  return transfer.direction === 'in' ? childFrame(frame, transfer.room, host, inset, mirrored) :
+    parentFrame(frame, host, inset, mirrored);
 }
 
-function boxSprite(entity) {
+function boxSprite(entity, mirrored = viewFlipped()) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = Math.ceil(Math.max(stage.clientWidth, stage.clientHeight) * (devicePixelRatio || 1));
   const context = canvas.getContext('2d');
@@ -598,7 +613,7 @@ function boxSprite(entity) {
   if (child >= 0) {
     const preview = document.createElement('canvas');
     const room = map.rooms[child];
-    drawRoomMap(preview, child, Math.ceil(side / Math.max(room.width, room.height)), true, true, null, (state.flipped ?? map.flipped)[entity]);
+    drawRoomMap(preview, child, Math.ceil(side / Math.max(room.width, room.height)), true, true, null, mirrored !== Boolean((state.flipped ?? map.flipped)[entity]));
     const scale = (side - 12) / Math.max(preview.width, preview.height);
     const width = preview.width * scale;
     const height = preview.height * scale;
@@ -630,7 +645,7 @@ function prepareBoxMotion(next, transfers, crossings = []) {
     for (const sprite of boxMotion?.sprites ?? []) {
       if (!groups.has(sprite.entity) && now < sprite.started + sprite.duration &&
           sprite.nextPositions[sprite.entity].every((value, index) => value === next.positions[sprite.entity][index])) {
-        sprites.push({ ...sprite, nextPositions: next.positions });
+        sprites.push({ ...sprite, nextPositions: next.positions, nextFlipped: next.flipped ?? map.flipped });
       }
     }
     for (const [entity, route] of groups) {
@@ -640,8 +655,9 @@ function prepareBoxMotion(next, transfers, crossings = []) {
       const old = boxMotion?.sprites.find(sprite => sprite.entity === entity);
       sprites.push({
         entity, route, position, positions: state.positions, nextPositions: next.positions,
-        from: old?.current ?? tileFrame(frame, ...position), canvas: boxSprite(entity),
-        flipped: (state.flipped ?? map.flipped)[entity] !== (next.flipped ?? map.flipped)[entity],
+        from: old?.current ?? tileFrame(frame, ...position), canvas: boxSprite(entity, Boolean(frame.flipped)),
+        orientation: Boolean(frame.flipped) !== Boolean((state.flipped ?? map.flipped)[entity]),
+        nextFlipped: next.flipped ?? map.flipped,
         started: now, duration: 220,
       });
     }
@@ -677,7 +693,7 @@ function paintBoxMotion(time) {
     }
     const position = sprite.nextPositions[sprite.entity];
     if (position[0] === Number(board.dataset.room) && position[0] !== sprite.position[0] && zoomCanvas.hidden) {
-      frame = board.getBoundingClientRect();
+      frame = viewedRoomFrame();
     }
     const target = tileFrame(frame, ...position);
     const from = sprite.from;
@@ -689,7 +705,8 @@ function paintBoxMotion(time) {
     const cy = from.top + from.height / 2 + (target.top + target.height / 2 - from.top - from.height / 2) * zoom;
     sprite.current = { left: cx - width / 2, top: cy - height / 2, width, height };
     const left = sprite.current.left - area.left, top = sprite.current.top - area.top;
-    if (sprite.flipped && progress >= .5) {
+    const targetOrientation = Boolean(frame.flipped) !== Boolean(sprite.nextFlipped[sprite.entity]);
+    if (sprite.orientation !== targetOrientation && progress >= .5) {
       context.save();
       context.translate(left + width, top);
       context.scale(-1, 1);
@@ -896,8 +913,11 @@ function renderScene(roomId, crossing, showText) {
 
 function renderRoom(container, roomId) {
   const room = map.rooms[roomId];
-  if (container.dataset.room !== String(roomId) || !container.children.length) {
+  const mirrored = viewFlipped();
+  if (container.dataset.room !== String(roomId) || container.dataset.flipped !== String(mirrored) || !container.children.length) {
     container.dataset.room = roomId;
+    container.dataset.flipped = mirrored;
+    container.style.direction = mirrored ? 'rtl' : 'ltr';
     container.style.setProperty('--columns', room.width);
     container.style.setProperty('--longest-side', Math.max(room.width, room.height));
     container.style.setProperty('--room-color', roomColor(roomId));
@@ -909,7 +929,7 @@ function renderRoom(container, roomId) {
     const terrainContext = terrain.getContext('2d');
     terrainContext.fillStyle = roomColor(roomId);
     for (let cell = 0; cell < room.tiles.length; cell++) {
-      if (room.tiles[cell] === '#') terrainContext.fillRect(cell % room.width, Math.floor(cell / room.width), 1, 1);
+      if (room.tiles[cell] === '#') terrainContext.fillRect(mirrored ? room.width - 1 - cell % room.width : cell % room.width, Math.floor(cell / room.width), 1, 1);
     }
     container.style.backgroundImage = 'url("' + terrain.toDataURL() + '")';
     container.replaceChildren(...Array.from(room.tiles, tile => {
@@ -943,7 +963,7 @@ function renderRoom(container, roomId) {
         button.className = 'room-box' + (goal ? ' room-on-goal' : '') + (map.clones[entity] ? ' room-clone' : '');
         button.style.setProperty('--box-color', roomColor(child));
         button.setAttribute('aria-label', child === roomId ? '查看小箱子里的同一张棋盘' :
-          '查看第 ' + (index % room.width + 1) + ' 列第 ' + (Math.floor(index / room.width) + 1) + ' 行的箱内房间');
+          '查看第 ' + (mirrored ? room.width - index % room.width : index % room.width + 1) + ' 列第 ' + (Math.floor(index / room.width) + 1) + ' 行的箱内房间');
         if (map.clones[entity]) {
           button.setAttribute('aria-label', '查看复制体里的共享房间，退出时回到本体');
           button.title = '复制体：进入同一房间，退出回到本体';
@@ -961,7 +981,7 @@ function renderRoom(container, roomId) {
       const inner = map.rooms[child];
       const size = Math.max(10, Math.ceil(Math.min(canvas.clientWidth / inner.width,
         canvas.clientHeight / inner.height) * (devicePixelRatio || 1)));
-      drawRoomMap(canvas, child, size, true, true, null, (state.flipped ?? map.flipped)[entity]);
+      drawRoomMap(canvas, child, size, true, true, null, mirrored !== Boolean((state.flipped ?? map.flipped)[entity]));
     }
   }
 }
@@ -972,6 +992,7 @@ function openLevel(index) {
   clearRoomMotion();
   if (recursiveZoom) cancelAnimationFrame(recursiveZoom.frame);
   inspectedRoom = null;
+  inspectedFlipped = false;
   active = index;
   const level = levels[index];
   const nextChapter = chapters.findLastIndex(chapter => index >= chapter.start);
@@ -1030,6 +1051,7 @@ function openLevel(index) {
 
 function move(direction) {
   if (inspectedRoom !== null || won(map, state)) return;
+  if (viewFlipped() && direction % 2) direction ^= 2;
   applyState(step(map, state, direction));
 }
 
