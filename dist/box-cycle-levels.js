@@ -551,7 +551,7 @@ BoxCampaign.cycle = [
   },
   {
     "title": "循环 13",
-    "hint": "推箱链绕回自身时，整条循环链会同时前移一格。可以转成推箱子的传送门地图。",
+    "hint": "本关包含方块穿过出入口后翻转的规则，请在套箱模式中游玩，不提供传送门转换。",
     "rows": [
       "###$###",
       "##b$i##",
@@ -617,7 +617,8 @@ BoxCampaign.cycle = [
     "flipped": [
       "root"
     ],
-    "portalConversion": true,
+    "portalConversion": false,
+    "conversionReason": "循环 13 包含翻转规则，不提供传送门转换，请在套箱模式中游玩。",
     "sourceFile": "flip_train"
   },
   {

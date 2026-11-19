@@ -33,6 +33,7 @@ test('Cycle contains all eighteen numbered original levels', () => {
 });
 
 for (const [index, level] of levels.entries()) {
+  if (index === 12) continue;
   test(`Cycle ${index + 1}: source and portal conversion agree on every original input`, () => {
     const { map, read, world, location, hosts } = setup(level);
     let source = map.initial, target = world.initial;
@@ -61,6 +62,26 @@ for (const [index, level] of levels.entries()) {
     assert.equal(E.won(world, target), true);
   });
 }
+
+test('Cycle 13 retains its mirrored gameplay and does not offer portal conversion', () => {
+  const map = B.compile({ ...levels[12], eat: true, allowCycles: true });
+  assert.equal(map.portalConversion, false);
+  assert.throws(() => P.convert(map, map.initial), /翻转规则/);
+  let state = map.initial;
+  let changedOrientation = false;
+  for (const direction of routes[12].replace(/\s/g, '')) {
+    const previous = JSON.stringify(state);
+    const next = B.step(map, state, 'URDL'.indexOf(direction));
+    assert.notEqual(next, state);
+    assert.equal(JSON.stringify(state), previous);
+    assert.equal(new Set(next.positions.map(p => p.join())).size, next.positions.length);
+    changedOrientation ||= next.flipped.some((value, id) => value !== state.flipped[id]);
+    state = next;
+  }
+  assert.equal(changedOrientation, true);
+  assert.equal(B.won(map, state), true);
+  assert.throws(() => P.convert(map, state), /翻转规则/);
+});
 
 test('Closing a chain in the middle rotates its boxes and leaves the outside player still', () => {
   const { map, world, location } = setup(levels[2]);
@@ -91,8 +112,8 @@ test('A plain portal loop rotates all boxes and the player atomically; a blocked
   assert.equal(E.step(blockedWorld, blockedWorld.initial, 1), blockedWorld.initial);
 });
 
-test('Conversion keeps room sizes and mirrors through export, import and AI training coordinates', () => {
-  for (const index of [12,15,16,17]) {
+test('Conversion keeps room sizes through export, import and AI training coordinates', () => {
+  for (const index of [15,16,17]) {
     const { map, read, world, location } = setup(levels[index]);
     const roundTrip = E.readLevel(E.writeWorld(read.tiles, read.chainPush, read.portals, read.finish));
     assert.deepEqual(roundTrip.portals, read.portals);
