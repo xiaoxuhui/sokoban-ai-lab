@@ -15,8 +15,8 @@ const routes = [
   'LLLDD DUURR RRDRR RRLUU LLLLD LULLU UUUUR',
   'RDRLL ULULL ULLDD DLLLL LLRUU URRDD DDUUU RRRDD RRRRD RUD',
 ];
-test('Flip contains the requested first two levels', () => assert.equal(levels.length, 2));
-for (const [i, level] of levels.entries()) {
+test('Flip contains sixteen numbered levels', () => assert.equal(levels.length, 16));
+for (const [i, level] of levels.slice(0, 2).entries()) {
   test(`Flip ${i + 1}: reference route and portal conversion preserve every move`, () => {
     const map = B.compile({ ...level, eat: true, allowCycles: true });
     assert.equal(map.flipped[map.rooms[0].owner], true);
@@ -62,3 +62,46 @@ for (const [i, level] of levels.entries()) {
     assert.ok(queue.length > 100, 'Explore beyond the supplied winning route');
   });
 }
+
+// Original level input files use logical directions after crossing a mirror.
+const allRoutes = require('./fixtures/box-flip-routes.json');
+const goalCounts = [1,1,2,1,3,2,0,3,1,2,1,2,1,2,2,1];
+for (const [i, level] of levels.entries()) {
+  test(`Flip ${i + 1}: original input route, orientation and immutable history`, () => {
+    const map = B.compile({ ...level, eat: true, allowCycles: true });
+    assert.equal(level.title, '翻转 ' + (i + 1));
+    assert.equal(map.goals.length, goalCounts[i]);
+    if (i >= 2) assert.throws(() => P.convert(map, map.initial), /暂不支持转成传送门地图/);
+    let state = map.initial;
+    const initialOrientation = map.flipped.slice();
+    let changedBox = false;
+    for (const [j, direction] of [...allRoutes[i].replace(/\s/g, '')].entries()) {
+      const before = JSON.stringify(state);
+      const next = B.step(map, state, 'URDL'.indexOf(direction));
+      assert.notEqual(next, state, `Step ${j + 1} must move`);
+      assert.equal(JSON.stringify(state), before, 'History must retain positions and orientation');
+      assert.equal(new Set(next.positions.map(p => p.join())).size, next.positions.length, 'Pieces cannot overlap');
+      for (const [roomId, x, y] of next.positions) {
+        const room = map.rooms[roomId];
+        assert.ok(x >= 0 && x < room.width && y >= 0 && y < room.height);
+        assert.notEqual(room.tiles[y * room.width + x], '#');
+      }
+      changedBox ||= next.flipped.some((v, id) => id > 0 && map.inside[id] >= 0 && v !== initialOrientation[id]);
+      state = next;
+    }
+    assert.equal(B.won(map, state), true);
+    assert.deepEqual(map.flipped, initialOrientation, 'The compiled map must keep its original orientation');
+    if (i >= 2 && i !== 11) assert.equal(changedBox, true, 'The route must exercise a box changing orientation');
+    for (const goal of map.goals) {
+      const occupant = state.positions.findIndex((p, id) => id > 0 && p.every((v, axis) => v === goal[axis]));
+      assert.equal(B.won(map, { ...state, positions: state.positions.filter((p, id) => id !== occupant) }), false);
+    }
+  });
+}
+
+test('A failed mirrored entry rolls back the orientation of every piece', () => {
+  const map = B.compile({ rows: ['#######','#@$a###','#######'], rooms: { a: ['###','# #','###'] }, flipped: ['a'], finish: [1,1], eat: true, allowCycles: true });
+  const initial = JSON.stringify(map.initial);
+  assert.equal(B.step(map, map.initial, 1), map.initial);
+  assert.equal(JSON.stringify(map.initial), initial);
+});

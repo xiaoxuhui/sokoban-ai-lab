@@ -6,10 +6,11 @@
 
   function convert(map, state) {
     if (map.transfer) throw Error('转移关卡需要保留出入口位置，不能转成传送门地图。');
-    if (map.portalConversion === false) throw Error('开放关卡的跨边界联动暂不支持转成传送门地图。');
+    if (map.portalConversion === false) throw Error(map.conversionReason ?? '当前关卡的规则暂不支持转成传送门地图。');
     const tiles = new Map();
     const portals = [];
     const offsets = [];
+    const flipped = state.flipped ?? map.flipped;
     let left = 0;
     for (const room of map.rooms) {
       offsets.push(left);
@@ -35,7 +36,7 @@
       const owner = location(state.positions[room.owner]);
       for (const [side, [dx, dy]] of directions.entries()) {
         const size = dx ? room.height : room.width;
-        const face = [...owner, map.flipped?.[room.owner] && dx ? side ^ 2 : side];
+        const face = [...owner, flipped?.[room.owner] && dx ? side ^ 2 : side];
         for (let lane = 0; lane < size; lane++) {
           const x = dx ? (dx < 0 ? 0 : room.width - 1) : lane;
           const y = dy ? (dy < 0 ? 0 : room.height - 1) : lane;
@@ -59,7 +60,7 @@
         const x = dx ? (dx < 0 ? 0 : room.width - 1) : lane;
         const y = dy ? (dy < 0 ? 0 : room.height - 1) : lane;
         if (room.tiles[y * room.width + x] === '#') continue;
-        portals.push([[...owner, map.flipped?.[entity] && dx ? side ^ 2 : side], [offsets[roomId] + x + dx, y + dy, side ^ 2], 'one-way']);
+        portals.push([[...owner, flipped?.[entity] && dx ? side ^ 2 : side], [offsets[roomId] + x + dx, y + dy, side ^ 2], 'one-way']);
       }
     }
     return {

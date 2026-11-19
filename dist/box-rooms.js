@@ -53,7 +53,8 @@
     return {
       rooms, inside, clones, flipped, goals, finish, eat: Boolean(level.eat), allowCycles: Boolean(level.allowCycles), transfer: Boolean(level.transfer),
       portalConversion: level.portalConversion !== false,
-      initial: { positions, moves: 0, pushes: 0 },
+      conversionReason: level.conversionReason ?? '当前关卡的规则暂不支持转成传送门地图。',
+      initial: { positions, flipped: flipped.slice(), moves: 0, pushes: 0 },
     };
   }
 
@@ -70,9 +71,20 @@
   function step(map, state, direction) {
     if (!directions[direction]) return state;
     const positions = state.positions.slice();
-    const moving = new Set();
+    const flipped = (state.flipped ?? map.flipped).slice();
+    const moving = new Map();
     const crossings = [];
     const transfers = [];
+
+    function checkpoint() {
+      return { positions: positions.slice(), flipped: flipped.slice(), crossings: crossings.length, transfers: transfers.length };
+    }
+
+    function restore(saved) {
+      for (let i = 0; i < positions.length; i++) { positions[i] = saved.positions[i]; flipped[i] = saved.flipped[i]; }
+      crossings.length = saved.crossings;
+      transfers.length = saved.transfers;
+    }
 
     function insideOwnBox(entity, roomId) {
       const ownRoom = map.inside[entity];
@@ -90,11 +102,11 @@
 
     function moveEntity(entity, offset, heading) {
       if (moving.has(entity)) return false;
-      const transferCount = transfers.length;
-      moving.add(entity);
+      const saved = checkpoint();
+      moving.set(entity, heading);
       const success = advance(entity, positions[entity], offset, heading);
       moving.delete(entity);
-      if (!success) transfers.length = transferCount;
+      if (!success) restore(saved);
       return success;
     }
 
@@ -114,9 +126,10 @@
         if (entity === 0) crossings.push({ direction: 'out', owner: room.owner });
         else transfers.push({ entity, direction: 'out', room: roomId, owner: room.owner, host: positions[room.owner] });
         offset = horizontal ? (y + offset) / room.height : (x + offset) / room.width;
-        if (map.flipped[room.owner]) {
+        if (flipped[room.owner]) {
           if (horizontal) heading ^= 2;
           else offset = 1 - offset;
+          flipped[entity] = !flipped[entity];
         }
         [roomId, x, y] = positions[room.owner];
       }
@@ -126,10 +139,12 @@
       const childId = map.inside[owner];
       if (map.rooms[positions[entity][0]].void) return false;
       if (owner === entity || childId < 0 || entered.has(owner)) return false;
+      const saved = checkpoint();
       entered.add(owner);
-      if (map.flipped[owner]) {
+      if (flipped[owner]) {
         if (heading % 2) heading ^= 2;
         else offset = 1 - offset;
+        flipped[entity] = !flipped[entity];
       }
       const [dx, dy] = directions[heading];
       const horizontal = dx !== 0;
@@ -137,15 +152,12 @@
       const scaled = offset * (horizontal ? child.height : child.width);
       // A face's exact centre selects the upper row on even-height rooms.
       const lane = map.transfer && horizontal ? Math.max(0, Math.ceil(scaled) - 1) : Math.floor(scaled);
-      const crossingsBefore = crossings.length;
-      const transfersBefore = transfers.length;
       if (entity === 0) crossings.push({ direction: 'in', owner });
       else transfers.push({ entity, direction: 'in', room: childId, owner, host: positions[owner] });
       const moved = land(entity, childId, horizontal ? (dx > 0 ? 0 : child.width - 1) : lane,
         horizontal ? lane : (dy > 0 ? 0 : child.height - 1), scaled - lane, heading, entered);
       entered.delete(owner);
-      if (!moved) crossings.length = crossingsBefore;
-      if (!moved) transfers.length = transfersBefore;
+      if (!moved) restore(saved);
       return moved;
     }
 
@@ -156,14 +168,14 @@
       // A forward push can close a loop through shared rooms. Its moving pieces
       // vacate their old cells together, including the player's starting cell.
       if (occupant >= 0 && moving.has(occupant)) {
-        if (!map.allowCycles || heading !== direction) return false;
+        if (!map.allowCycles || heading !== moving.get(occupant)) return false;
         positions[entity] = [roomId, x, y];
         return true;
       }
       if (occupant >= 0 && !moveEntity(occupant, 0.5, heading)) {
         if (enter(entity, occupant, offset, heading, entered)) return true;
         if (!map.eat || map.inside[entity] < 0 || moving.has(occupant)) return false;
-        moving.add(occupant);
+        moving.set(occupant, heading ^ 2);
         // A swallowed piece moves inward through the moving box's leading face.
         const swallowed = enter(occupant, entity, 0.5, heading ^ 2, entered);
         moving.delete(occupant);
@@ -175,7 +187,7 @@
 
     if (!moveEntity(0, 0.5, direction)) return state;
     const pushed = positions.some((position, index) => index > 0 && position !== state.positions[index]);
-    return { positions, moves: state.moves + 1, pushes: state.pushes + Number(pushed), crossings, transfers };
+    return { positions, flipped, moves: state.moves + 1, pushes: state.pushes + Number(pushed), crossings, transfers };
   }
 
   const api = { compile, placed, step, won };

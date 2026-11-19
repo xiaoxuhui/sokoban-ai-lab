@@ -300,12 +300,13 @@ function drawFinish(context, left, top, size, playerOnFinish) {
 function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true, viewport = null, flipped = false) {
   const room = map.rooms[roomId];
   const hidden = [...hiddenBoxes].join(',');
-  if (previewContents?.map !== map || previewContents.positions !== state.positions || previewContents.hidden !== hidden) {
+  if (previewContents?.map !== map || previewContents.positions !== state.positions ||
+      previewContents.flipped !== state.flipped || previewContents.hidden !== hidden) {
     const pieces = map.rooms.map(() => []);
     state.positions.forEach(([id, x, y], entity) => {
       if (!hiddenBoxes.has(entity)) pieces[id].push([entity, x, y]);
     });
-    previewContents = { map, positions: state.positions, hidden, pieces };
+    previewContents = { map, positions: state.positions, flipped: state.flipped, hidden, pieces };
   }
   const cached = roomMaps.get(canvas);
   const view = viewport ? JSON.stringify(viewport) : '';
@@ -317,9 +318,10 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
   const context = canvas.getContext('2d');
   const emptyChapter = board.classList.contains('empty-chapter');
   const cloneChapter = board.classList.contains('clone-chapter');
-  const playerColor = cloneChapter ? '#be2850' : board.classList.contains('reference-chapter') ? '#c53d3a' :
+  const flipChapter = board.classList.contains('flip-chapter');
+  const playerColor = flipChapter ? '#d250be' : cloneChapter ? '#be2850' : board.classList.contains('reference-chapter') ? '#c53d3a' :
     map.eat ? '#d260bd' : emptyChapter ? '#db562f' : '#df328d';
-  const crateColor = cloneChapter ? '#468cfa' : map.eat ? '#ffdc72' : emptyChapter ? '#add444' : board.classList.contains('blue-crates') ? '#38bce8' : '#ffb63a';
+  const crateColor = flipChapter ? '#5abea0' : cloneChapter ? '#468cfa' : map.eat ? '#ffdc72' : emptyChapter ? '#add444' : board.classList.contains('blue-crates') ? '#38bce8' : '#ffb63a';
 
   function paint(id, left, top, cellSize, depth, mirrored = false) {
     const room = map.rooms[id];
@@ -360,7 +362,7 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
         const inner = map.rooms[child];
         const scale = side / Math.max(inner.width, inner.height);
         paint(child, px + (cellSize - inner.width * scale) / 2,
-          py + (cellSize - inner.height * scale) / 2, scale, depth + 1, map.flipped[entity]);
+          py + (cellSize - inner.height * scale) / 2, scale, depth + 1, (state.flipped ?? map.flipped)[entity]);
       }
       if (map.clones[entity]) {
         context.strokeStyle = '#e9f3ff';
@@ -411,7 +413,7 @@ function renderSurround(scene, roomId) {
     const outer = map.rooms[host[0]];
     const size = Math.max(frame.width, frame.height);
     if (!Number.isFinite(size) || size > Number.MAX_SAFE_INTEGER / Math.max(outer.width, outer.height)) break;
-    mirrored = mirrored !== map.flipped[map.rooms[current].owner];
+    mirrored = mirrored !== (state.flipped ?? map.flipped)[map.rooms[current].owner];
     frame = parentFrame(frame, host, 1, mirrored);
     layers.push({ roomId: host[0], size, left: frame.left, top: frame.top, flipped: mirrored });
     current = host[0];
@@ -525,7 +527,7 @@ function visibleRoomFrame(roomId, positions, seen = new Set()) {
     while (true) {
       const host = positions[map.rooms[ancestor].owner];
       if (!host) break;
-      mirrored = mirrored !== map.flipped[map.rooms[ancestor].owner];
+      mirrored = mirrored !== (state.flipped ?? map.flipped)[map.rooms[ancestor].owner];
       frame = parentFrame(frame, host, 1, mirrored);
       ancestor = host[0];
       if (ancestor === roomId) return frame;
@@ -582,6 +584,7 @@ function boxSprite(entity) {
   const edge = canvas.width * .065;
   const side = canvas.width - edge * 2;
   context.fillStyle = child >= 0 ? roomColor(child) :
+    board.classList.contains('flip-chapter') ? '#5abea0' :
     board.classList.contains('clone-chapter') ? '#468cfa' :
     board.classList.contains('blue-crates') ? '#38bce8' :
     board.classList.contains('empty-chapter') ? '#add444' :
@@ -595,7 +598,7 @@ function boxSprite(entity) {
   if (child >= 0) {
     const preview = document.createElement('canvas');
     const room = map.rooms[child];
-    drawRoomMap(preview, child, Math.ceil(side / Math.max(room.width, room.height)), true, true, null, map.flipped[entity]);
+    drawRoomMap(preview, child, Math.ceil(side / Math.max(room.width, room.height)), true, true, null, (state.flipped ?? map.flipped)[entity]);
     const scale = (side - 12) / Math.max(preview.width, preview.height);
     const width = preview.width * scale;
     const height = preview.height * scale;
@@ -638,6 +641,7 @@ function prepareBoxMotion(next, transfers, crossings = []) {
       sprites.push({
         entity, route, position, positions: state.positions, nextPositions: next.positions,
         from: old?.current ?? tileFrame(frame, ...position), canvas: boxSprite(entity),
+        flipped: (state.flipped ?? map.flipped)[entity] !== (next.flipped ?? map.flipped)[entity],
         started: now, duration: 220,
       });
     }
@@ -684,7 +688,14 @@ function paintBoxMotion(time) {
     const cx = from.left + from.width / 2 + (target.left + target.width / 2 - from.left - from.width / 2) * zoom;
     const cy = from.top + from.height / 2 + (target.top + target.height / 2 - from.top - from.height / 2) * zoom;
     sprite.current = { left: cx - width / 2, top: cy - height / 2, width, height };
-    context.drawImage(sprite.canvas, sprite.current.left - area.left, sprite.current.top - area.top, width, height);
+    const left = sprite.current.left - area.left, top = sprite.current.top - area.top;
+    if (sprite.flipped && progress >= .5) {
+      context.save();
+      context.translate(left + width, top);
+      context.scale(-1, 1);
+      context.drawImage(sprite.canvas, 0, 0, width, height);
+      context.restore();
+    } else context.drawImage(sprite.canvas, left, top, width, height);
     if (progress < 1) active.push(sprite);
     else hiddenBoxes.delete(sprite.entity);
   }
@@ -937,7 +948,6 @@ function renderRoom(container, roomId) {
           button.setAttribute('aria-label', '查看复制体里的共享房间，退出时回到本体');
           button.title = '复制体：进入同一房间，退出回到本体';
         }
-        if (map.flipped[entity]) button.title = '镜像箱子：左右出入口相反';
         button.append(document.createElement('canvas'));
         button.addEventListener('click', () => inspectRoom(child, { direction: 'in', owner: entity }));
         cell.append(button);
@@ -945,10 +955,13 @@ function renderRoom(container, roomId) {
     }
     if (child >= 0) {
       const canvas = cell.querySelector('canvas');
+      const button = canvas.parentElement;
+      button.title = (state.flipped ?? map.flipped)[entity] ? '镜像箱子：左右出入口相反' :
+        map.clones[entity] ? '复制体：进入同一房间，退出回到本体' : '';
       const inner = map.rooms[child];
       const size = Math.max(10, Math.ceil(Math.min(canvas.clientWidth / inner.width,
         canvas.clientHeight / inner.height) * (devicePixelRatio || 1)));
-      drawRoomMap(canvas, child, size, true, true, null, map.flipped[entity]);
+      drawRoomMap(canvas, child, size, true, true, null, (state.flipped ?? map.flipped)[entity]);
     }
   }
 }
@@ -1006,6 +1019,7 @@ function openLevel(index) {
   board.classList.toggle('eat-chapter', theme === 'eat');
   board.classList.toggle('reference-chapter', theme === 'reference');
   board.classList.toggle('clone-chapter', theme === 'clone');
+  board.classList.toggle('flip-chapter', theme === 'flip');
   board.replaceChildren();
   textMaps.replaceChildren();
   displayMode.hidden = !level.textView;
