@@ -143,9 +143,9 @@ function viewAfterCrossings(previous, next) {
   for (const crossing of next.crossings ?? []) {
     const room = crossing.room ?? map.inside[crossing.owner];
     const hostRoom = crossing.host?.[0] ?? next.positions[crossing.owner][0];
-    const selfExit = crossing.direction === 'out' && room === hostRoom;
+    const selfReference = room === hostRoom;
     const flipped = crossing.flipped ?? (previous.flipped ?? map.flipped)[crossing.owner];
-    if (flipped && !selfExit) mirrored = !mirrored;
+    if (flipped && !selfReference) mirrored = !mirrored;
   }
   return mirrored;
 }
@@ -153,8 +153,8 @@ function viewAfterCrossings(previous, next) {
 function inspectRoom(roomId, crossing) {
   clearBoxMotion();
   const owner = crossing?.owner;
-  const selfExit = crossing?.direction === 'out' && map.inside[owner] === state.positions[owner][0];
-  const mirrored = owner >= 0 ? viewFlipped() !== (Boolean((state.flipped ?? map.flipped)[owner]) && !selfExit) :
+  const selfReference = owner >= 0 && map.inside[owner] === state.positions[owner][0];
+  const mirrored = owner >= 0 ? viewFlipped() !== (Boolean((state.flipped ?? map.flipped)[owner]) && !selfReference) :
     roomId === state.positions[0][0] && Boolean(playerViews.get(state));
   inspectedRoom = roomId === state.positions[0][0] && mirrored === Boolean(playerViews.get(state)) ? null : roomId;
   inspectedFlipped = mirrored;
@@ -869,8 +869,7 @@ function paintRecursiveZoom(time) {
 
 function renderScene(roomId, crossing, showText) {
   const sameRoom = board.children.length > 0 && Number(board.dataset.room) === roomId;
-  const selfExit = sameRoom && crossing?.direction === 'out';
-  const animate = crossing && !selfExit && !showText && !reduceMotion.matches;
+  const animate = crossing && !sameRoom && !showText && !reduceMotion.matches;
   const entering = crossing?.direction === 'in';
   const shell = crossing?.owner >= 0 ? '[data-shell="' + crossing.owner + '"]' : null;
   let oldFrame, oldShell, returningFrame, ghost;
