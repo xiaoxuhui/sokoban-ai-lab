@@ -1,0 +1,1028 @@
+{
+  "intro": [
+    {
+      "route": "UURRRDDUUULLLL",
+      "source": "first_puzzle.solution"
+    },
+    {
+      "route": "LLUUUURRDDDLDRRURDLDLLR",
+      "source": "second_puzzle.solution"
+    },
+    {
+      "route": "UUURRDDDLDRRDRRULLLLULLDDRUUULUR",
+      "source": "third_puzzle.solution"
+    },
+    {
+      "route": "RUUULURRRRRRDRUUUUDDDDDDLLLL",
+      "source": "enter.solution"
+    },
+    {
+      "route": "DDLLLLULLDRRURDDRRRUU",
+      "source": "elbow_finish_idiom.solution"
+    },
+    {
+      "route": "UULLDDDLLRRURDDDDLLRRRRRUURRDDLLUUUURULLUUDRDLDDRR",
+      "source": "round_corners.solution"
+    },
+    {
+      "route": "RRRUULLLDLLUURRDDDLL",
+      "source": "separate.solution"
+    },
+    {
+      "route": "DDRRDRUUUUDLURRURRDDLDDDDLLL",
+      "source": "enter_two_sides.solution"
+    },
+    {
+      "route": "ULLDDLDRRRRDRRULLLRRR",
+      "source": "lock_door.solution"
+    }
+  ],
+  "enter": [
+    {
+      "route": "LLLDDRURULLULDDDDDRDLLULLDRRRRRUR",
+      "source": "carry.solution"
+    },
+    {
+      "route": "LUUUUULDLDRURDDDRDLUUUUURDRDLULDDDRDLLLLULLDRRRRRRRUR",
+      "source": "turn_around.solution"
+    },
+    {
+      "route": "LUULURDDDDDLDRUURRRDRULUUULDRDLLLLLL",
+      "source": "correct_placement.solution"
+    },
+    {
+      "route": "RUULLLRDDDLUURULLLLL",
+      "source": "nest_two.solution"
+    },
+    {
+      "route": "ULDRRRDLLDLURULLULLDRRRRDRRULDLUUDDDL",
+      "source": "puzzlescript.solution"
+    },
+    {
+      "route": "LULLURRDRRRRDLLDLUUDRUULDDDRRD",
+      "source": "squash_inside_2.solution"
+    },
+    {
+      "route": "DDLLLURULLUURDRDLLLLLLDLUUDLURRURDLDRRRRRRDDRRR",
+      "source": "squash_inside_3.solution"
+    },
+    {
+      "route": "LUURRURDDRRULULDDRDLULLDDRUUUULURRRRRRRUUDDLLLLLLU",
+      "source": "load_elbow.solution"
+    },
+    {
+      "route": "RUUURDDDRDLLRRDLLUUUUULDDDDLLRRRDRUUULURRRUU",
+      "source": "exit_and_push_2.solution"
+    },
+    {
+      "route": "URRDURRDDRDLRDLLLLDDLUUULURLURLURDDDDDDRRUDRRRULLLDLUUUURR",
+      "source": "cage.solution"
+    },
+    {
+      "route": "RRRRRRRRDDRRUUUDDDLLUUUURRRRULLULDDDUURRRDLLLLLLLLLLLLLUUL",
+      "source": "rescue.solution"
+    },
+    {
+      "route": "DDRRRLLDDRDDUUUUUULLLUUULLRRRRRUU",
+      "source": "ref.solution"
+    },
+    {
+      "route": "DDDDUUULURRUUURRRRRRDDLLLL",
+      "source": "ref2.solution"
+    },
+    {
+      "route": "RRDDDULLLLLLLLRRRRUU",
+      "source": "cannon.solution"
+    },
+    {
+      "route": "ULLDDDURRRDRRRLULLLLLDDDUUURRRRRDRR",
+      "source": "cannon2.solution"
+    },
+    {
+      "route": "LUUULURRRLLLLUURRRUUDRDLLLULDDDLDRRLUUUULLUURRRUURDLLLLUL",
+      "source": "ref_turn_around.solution"
+    },
+    {
+      "route": "UURRRRRRUURRRRRRUULLUUUULURRRRRURRRDDDRRDDDDLDDRUUUUUDLLLLLDDDDDRRU",
+      "source": "ref_static.solution"
+    },
+    {
+      "route": "UURULULLDRRRRLLUURDLDDDDDRDDRULLLDLURULULDDLDDDR",
+      "source": "lock_3.solution"
+    }
+  ],
+  "empty": [
+    {
+      "route": "UURDRRLLDDUULLRDRULL",
+      "source": "exit_all_sides.solution"
+    },
+    {
+      "route": "DLLLUURRRRULLLLDLUUUDLURRRURDD",
+      "source": "squash_inside_4.solution"
+    },
+    {
+      "route": "LLLLDLUUUDDDDDUUUURRRR",
+      "source": "swap_blocks.solution"
+    },
+    {
+      "route": "LDLDRUURRRDLULDDDLDDRUUD",
+      "source": "lock_door_setup.solution"
+    },
+    {
+      "route": "DLDRRDRULURRURDLLDDRULURURDLLLURRDRDLDDRUURRU",
+      "source": "empty_lock_door.solution"
+    },
+    {
+      "route": "UULLDDDDLLLRRRRUUUURDDDDRRRLLULDLDDRUUUUU",
+      "source": "empty_carry_better.solution"
+    },
+    {
+      "route": "RDRUURULDLUULLDRDRRURULDDLUUUULURDRURRLLULLLDRRRLL",
+      "source": "independent push-state search"
+    },
+    {
+      "route": "LLLRUUUDRRRUUDLRRLDDDD",
+      "source": "push_once_entry_allowed_4.solution"
+    },
+    {
+      "route": "DLLLDRDRUUUDLLURDDDRRURULDLUUULURLURURDDDDUUURDLULLDDRUUDDDDDD",
+      "source": "up_down_shuffle.solution"
+    },
+    {
+      "route": "LUURDRRDLLLDLUULURRDRUUURULDLLUDRRULDLULURRRRRRRDRULUURDDDL",
+      "source": "pack_three.solution"
+    },
+    {
+      "route": "RDDRDLUUULDDRDLLLLLLLUUDDDDDUUUUURULLLLRDDDR",
+      "source": "carry_swap.solution"
+    },
+    {
+      "route": "UUUURLUUUDDDRDLLLUULLURDRUUUULURRURDDLD",
+      "source": "two_peel_easy.solution"
+    },
+    {
+      "route": "LUUUUDDLLLLRDDDRRDDRDLULDDUUUULUURRULLDDDRRRR",
+      "source": "careful_cannon.solution"
+    },
+    {
+      "route": "LLLDRRURDDDDUUURRRULRUULDLLLLLURRDRUUUDDRRRDLLRRDDLLUDRURULDDR",
+      "source": "two_peel_careful.solution"
+    }
+  ],
+  "eat": [
+    {
+      "route": "RRRDLDLUURRULLL",
+      "source": "eat_recognize.solution"
+    },
+    {
+      "route": "LUULURDDDRRRULDLUUUDRURULLLRRR",
+      "source": "eat_4_sides.solution"
+    },
+    {
+      "route": "LDRDRRDLDLUURRULULLDDRRULLULDDRRDDLURULULDDUUU",
+      "source": "eat_long_line.solution"
+    },
+    {
+      "route": "DRRURDLLLDRRURDDDDDRRDRLUUUUUUU",
+      "source": "sticky_carry2_v2.solution"
+    },
+    {
+      "route": "LDDRRDRUUULURRRLDDDDDDLDULLL",
+      "source": "narrow_door.solution"
+    },
+    {
+      "route": "DLDRRUUURDDDLDRLDDRRUUULURRLDDDDLDULLL",
+      "source": "narrower_door.solution"
+    },
+    {
+      "route": "RRRRDDLULLLDULLLDRRURDURRRRDLLLULDULLLDRRURDURRDLULDDDDDDLDDRR",
+      "source": "eat_stack_v2.solution"
+    },
+    {
+      "route": "ULLLDRRURDDDDUURRRLLDLULDDURUUUUURULDLURRULLLLULLDDDUUURDDURRRRRRRDDDRRLULDDUUURRRRRDDDDDDLLDLUUUU",
+      "source": "eat_ref_rescue_v2.solution"
+    },
+    {
+      "route": "RRRDDDRURULLLLDDRUURULLULDLDRURDDRDLDLUDLURRDRUUURRU",
+      "source": "eat_then_tight_squash.solution"
+    },
+    {
+      "route": "RUURDDRDLLDLUUUUDDLURRURDDDLDRLLL",
+      "source": "careful_packing0.solution"
+    },
+    {
+      "route": "RDDDLULURRRLDDRULURRDRULLLUURDLDRRDRUUUDDRULLLDLULURRURDDDLLLLD",
+      "source": "careful_packing1.solution"
+    },
+    {
+      "route": "DRURDDDULLDDLLURRDRULLLURRDRULURURDDDLLLLUURURDDDDRURRDLLULDDD",
+      "source": "eat_correct_order.solution"
+    },
+    {
+      "route": "URRRRUUUUUULLLLLLDLLURRRRRRRLLLDRUUURUULDDDDDDLDDDR",
+      "source": "text_eat_v2.solution"
+    }
+  ],
+  "reference": [
+    {
+      "route": "LUULULDDDURRDLULDDDUURRRRURRLLLUU",
+      "source": "nest_ref.solution"
+    },
+    {
+      "route": "LLLLURRDRUUDDRDLLLULDRRRRDLLLULDDUUUURRRUULDRRRDR",
+      "source": "ref_carry_simple.solution"
+    },
+    {
+      "route": "LDDDRUULURRRDRUUDLLLLUUURUULURDDDDLDRURDDDLLLLLLLD",
+      "source": "initiate_peel_0.solution"
+    },
+    {
+      "route": "ULLLDRRDRUURULLDDDLLLLULLURDUUUUUDDDLDRRURDRDD",
+      "source": "initiate_peel.solution"
+    },
+    {
+      "route": "LLDLUUULURRRLDLDRRDRURULLLLULDDRRRUUUULUULL",
+      "source": "ref_stack_lock.solution"
+    },
+    {
+      "route": "UURRDDLDRRLLDRRDRUUUUUDDDDRULDLUULURURRDDRRLULDLDRDDL",
+      "source": "portal_setup_both.solution"
+    },
+    {
+      "route": "RRRRRUURRRRRRDLLLDLULRRULLRDDDDRRRRULLLLLDLUUULLLLDLURDDDDRDDDDLRUULLDDDDRDLUULDDDDULDRUUUURUULDRUUUURUUUUUUUU",
+      "source": "previous independently verified gameplay route"
+    },
+    {
+      "route": "DLLLLDLLLLLDLLLLLULLLLDURRDRRRRRRRURRDLURRURRRRDLURRURRRRDLURRURRRRDLURRRU",
+      "source": "portal_open_close.solution"
+    },
+    {
+      "route": "RRUUDLLDDDDRULRRRDDDLLLDLUUUUUDDDLLURDDDLLLDRRDRUUUUUUDDDDLLDDDDDLRUUUUULL",
+      "source": "narrow_door_two_deep.solution"
+    },
+    {
+      "route": "LDDDDLUDRRRULLDLUUUDDLURRRRRLLLLLULLDRUUDDDDUUUDDLLLLLLULLURDDDDDDDDLLLLUU",
+      "source": "ref_carry_careful.solution"
+    },
+    {
+      "route": "DLLLURRRRDDDRULLLDDRDDULLUUUURRRDRRLLDLUULURDRUUUDRRDRLULLLLLUUURUUDDDDDRDLLLLLULDDLD",
+      "source": "zoom_in_anim.solution"
+    },
+    {
+      "route": "DLLLDRRDRUUDDRUURULLLRRULDDDRDLULDDUUURUULUULDLLRUUUURUULUURDLLLLUULLL",
+      "source": "zoom_out_anim.solution"
+    }
+  ],
+  "swap": [
+    {
+      "route": "RDDDRDLULLLURURDDDDRDLLLLLLLLDDRRDRUULURRRRURDDRDLLURRR",
+      "source": "swap_first.solution"
+    },
+    {
+      "route": "DDDRRULLLLLDRRURDDURRURULLLLDLURRRRRULLLLLLLDLUUUUUUULLDDDLDRRURDDDRDLDLUULURRDRUDRRLLLLLDD",
+      "source": "swap_cannon.solution"
+    },
+    {
+      "route": "UUURUULDDDRDLDLLUUURUULDDDDLLDRDRRUDLLURDRUUUURUULLLDDLLLLURRRDRULURRRDDDUURRULULDRDLLRDDDUUUUULLLDDRRRDRURULLLLLDLURULLLRRRRDRRDLUULURURDDDDDDDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DRRRULDLUULLURRRRRRLLLLURRDDDRDLLULDDUUUURRRRRDRUUUUUURRDDDRDLLULDDDLDRL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DRDRURUUULLDDLLLDRRRRLLUUULDLDRRRRRLDDRULURRRLRURRRRDDRDLLLULLUURDURRRDLULLDURRDLULDDDDRDLRDLRDLDLUUUUULURDRUUULLDRDDDDRUUULDRRDRUURULLLLLLDDDDLURDRUUUR",
+      "source": "swap_chain.solution"
+    }
+  ],
+  "center": [
+    {
+      "route": "RRRRRRUULLLLLULLDRRRRRDDR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLLLLULDRDDRRRURLLLLUL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DRRUULURRRRRURDDDDLDDRUUURULLLLLLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLLLLLLULDDDRRRRRULDDDLDRRRRDRUURRD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UULLLLDDDDDDDLDRRRRURDLDDRUUURRD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDRRRLLLLRRRRUUUUUURUULDDUUUURRRDR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDDDUUUULDRDDDRRRRRRLUUUUDDLDRUUURRRRRDRUULURDR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDDLURULLLLLLUURUDDLDRRURDDDLDDRRRRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDDRRRRURRRDDLUUUULUUURURDDRDLLLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDRRUUURRUUULLULDLLDDRDDLLUURRRRDDR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDLULURRRRUULDLDRRRURDLDRLLLLUULDLDRRRRRURDDLDRLLLDLDRRUUURDDDRRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UULDDDDURDLLLULUUDDDDRRRLLLLLLLLURDRUUUUR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDDULLLDRRURDRDLLLULDLDRURLDDDULURRRRURDDDDLDDRRRLLLURRUUUUUUR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLDUULLDDRRRDLLLULLDDRULURDRRRUUULDDRDLULDDDRDLUULLLDRRRLLURRURR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRRDDLLURUDDDUUULDRRDRRRULLLLLLUURUR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRDDRRULDLURULLLLLLLLUULLDRRDLULDDURRRRRRRRRRDRRURLDLLULLLLLLLUUR",
+      "source": "existing regression route"
+    }
+  ],
+  "clone": [
+    {
+      "route": "DDDDDRRUUUURRURDDDDUUULLLDDDDLLUUULU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UULLLLDDUUURRRRURLRRRUUUURRRUDUUUURULDLULLU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDDLULDDRRDLLLDLLULRDRDDLUUDDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LUUURDDLDRDRURRRUUULLLLLLULLDLLLLLDLUUUUDRRUULLDDDLLLLDLLULLLDDDLLLDDDDLLUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLURRURDDDLDRRRLLLLLURRDRUUUUDUUUDDLLLLUUUURL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDDDRULURRDRUUUURRDLULUUUURULDLUUUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDLUULURRDDDDLLDLRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "ULDDRUULURRRRRLLDDDUDLLLLDDDRRLLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDDRURDDDLDRRRURDDLDRRRRRDR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UULLDDDRRDDDDLDRURDLUUUURULLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDDDRRUURULURRUULDLDRRRRDDRRRDRRUUUUURRRDLDRRLLLLDDDLLULUURULLRDLDLUURUUUL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLLDDRLDDDRUULURRRDRUUURULLDDDLLURDDLDRRRRURDDDUUUUULLLLRRDRUUUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UURRRDDDRRLLLLLRDDDLLRRRRRRLLLDDDLLLLLDDR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRRRDLLLRRRRLDDDRRRRRURRUURRRURRDRURUURLDDLLLLDRUURRRURRUURRRURRDDR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LUUURDLDRRRDRULLURRRRRRUULDRDLLLLLLURDULLLDRRDDRRULDLULURRRRRRURDDDUULLLLLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDDDRURRUUUURRDLULDDDLURRDRULLLDDDRULURRURUUUUURULLRDDDDDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDRULURLUURDLULDLDRRRRURDDLLDDDDRDDLLURRRRDRUUULLULUURUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DLLURRRRDLUUURURURUUUURDULLLLDDLLURRUULL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RUUULDRDLLUULDDLDRURDDRDLDLUUDDLURDRUUUUULDRRDRUURUL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UURRULDDLLLDDDDLLURDDRDDLLDDLDRRURDURDLLLLDDDLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLLDDDDRURRDULLDRLUURURDDRRRUUURULDDDDLLLDURRRUUURULDDDDDLUULULDDRRRUUURULDDDDLLLDURRRUUURULLLLULDDDDRDLRRUUUURULDDDDLLLDRRRUUUURULLLLDLUDLUDLURRRULLDL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDRDLLLLLDLULURDDLLULURRRRRURDURDRDLLLLRRDLURULLLLLULDDDUURRRRRRRLLLUURDLDRRLUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRDRUDDDLLURDRUUUUULURULURURDDDDDDDRDLLRRUUUUURRDLULDDDLDRRRRUUUURULRDDDDDDDDDDRDLLRRURRDLLRUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRRULDLDDDRUUURULDDDLLDLUUULDDDRDLLLLDLUUUUUULLLDDDDDDDDRDLLLLLDLUUUUULLRDDDRULLLLRRRRRRLUUUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLLUUURRDDDDDRRRDDDLDRRDDDRRDLLRUUUUURULLLULDRRRRRUUUUUUUURRLLUUUUUU",
+      "source": "existing regression route"
+    }
+  ],
+  "transfer": [
+    {
+      "route": "DRRRRRRRULLLLLULLDRURDDDDDDRRRRRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LUUURDLDRRRLUURDLDRURDDLDRURRDLLDLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDDDDDUULLLURRURDDDDRDLULDRDDLUUULLDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLURDRUURRDLDLUULLUURDDLDRURRRUULDDDRDLUULULUURDDLDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RURDDDLLUUULLDRURDDDDLDRRRDRUUULLLLUURRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDDLUURULRUUULDDRDLLLDLLLRRUUR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRDLULDDLLURRURDDLLDRRURRRRLLDRRUURULLULDDRDLLDLLLLRDL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDRULLLUUURDLDRUURRDLULDLDRRRDRRRRRRRU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLULDDRRRRDLLLUULLLLDDDDRDURUULDDDRRDDDDLLLLULRUUUURRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDLDRRUURDLUURURDDDUUULLLLDRRRRURDDDLLDDRRRLLDRRUURULLLLLULDDDRURRDLULDDDLLLRUUUUUURR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DLLDRDRUURRDLLLLLDDLRURDDLDRUUULLDDDDDDLDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDDRRRRDRUULUUULLLLLULL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RUUULDDRDLRRRUULLULDDRDLDLUULURRRLLLLUUULLRDDDRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LUUURDDLDRDRRRUULDRDLUUUUUUULLLLLDLLURRDDRURRULDLLLUURDLDRDRUUDLURDRRUULDRDLDDUUUUULURDRUUUUURULRRRUUUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "URRRDLLULDDRDDLRUULDRRRULL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRRRUULLLLLDDDDDLDDLDRRRURDDLDRRLULLLLLDRURRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRRRDDDLLULUUUUUURULLLDLUUUURULLRDRRRURRRUUDLLDDL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UUURRDRDLUULLDRDDURRDDLUUULLUUURRDDDLLLLUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "URRRDDDDLURULLDLUURULURRDRDDLDLUUURULLDDDLDDLUUURRRURRDLULDDDRDRUUURULLLDDDLLDDDRRUUULLLLDDDDDDDLLLLLLLLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRUULDRDLUULDRRDDDLUURULULLLDDDDRUUULURLURRDDDDDDRRUUURRDDDRRUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UULLUUURUULDDDLDRRRRDRULURRRRRDDRRUULLDDLDLLLUUUUUUUURRRDDDRLDLUUDDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "URULULDRDLUULDDDDDDRDLULDRRRLULDDDLUULL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDDDLULLDULLDRURDURRDLULDDUURRRRRDDDDDDDLLLLLUURRRRDRUUUUURRUUURRRRULLLDLLURRRRDLLLLLLUURDRRRDLLLUURDDDDDLLDRRRURDDLDRRRDRRUUDDDLDRLUUULLLUULLLLLUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RURRULLULLDDRRULULDDDLDRURRRRURDDLLLUULLDRRRRURDDDLDRLLLLDLLUURURR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DRRDRDLLUURRULLULDDDDRDLLLLLLLLRRRRRRRRDLLLLLLDLURULLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRDRUUUULURDRRDLDLUULLLLDRDRUULURRDRDLDLUURRRRDDDLLLLDLUUUURRURURRDLLULLLDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLLDLURRRDDDRRRRRUUUURRRDDDRRRULLDDDLLLUUURURDDDLDRRRRRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UULULLLDDRDDRDDLUURULULLLDDRDRRRDRRULLDLULULUURRRDRRRDDDDLUULLDRRUDUUL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "URUURDDDDRDLLLUUUUULDDDDDDRDDDLLLRRUUURRLRUULDRDLRR",
+      "source": "existing regression route"
+    }
+  ],
+  "open": [
+    {
+      "route": "DDDLUUUULURDDDRRDDDDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LULDDRDLLRRURDRDLLLLRRRDDDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDRRULLLDLDDRUUDDRRUURULLLLLDLLLLUDRRULUULDRRRRRDDDDRRRDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DLLLDRRDRUUUULLLDRRDRRRDLDLUUUURULLLULDRDLRRRDDDDDDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UURRRURDDDDDRLLULDDDRDLDDDDDLDDRLUURUULLDDUUUUUUURRRRDRRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UUUUUUDDDDDRDDDUUUULLLLRDRURUULLULDUUR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DRRRRRRRLLLLLRULLLDRLLRRRRUULLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRRRLLLLLRRRRRRRLLLLLLUUUULDDRRULUURDLDDDDDDLURRRRRRLLLUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDDLLLULUURDDRDLLUUUDRDLDLULULUURRRRDLLLDLUUUDLRDRURULLLLLUURRRRRUULDRDDDLLURRRUULLDRDDLLURR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DLLURURDDDRDLUULDRDLLLDLUUUUUDDDDDLURRRURDDUURDLLLDLUULUURDDDDLD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDDRRULURRUR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UUUDDDDDDDDDRDLLDDDLDDDDDLDRURDDLDRDDDRDDDDDLDRURDRU",
+      "source": "existing regression route"
+    }
+  ],
+  "flip": [
+    {
+      "route": "LLLDDDUURRRRDRRRRLUULLLLDLULLUUUUUR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDRLLULULLULLDDDLLLLLLRUUURRDDDDUUURRRDDRRRRDRUD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDDRRDRRUDLULURRRRLULLDDDUUURDDDDDRRRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LUUURDLDRRRDRURULLRDRURULDLLLLLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RUULDLUUUUUUUUDLLULURRRURDDRDLLDLDLUULURDDRUUUUUUUULUURLDDRULURDRULURRLDLUUUUUURRRL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDDDLDLUUUUUUULLURDRUURULLLRRDRULURRURDDDDRRLDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDDLUUUUUUUUUUUDDDDUUUUUDUUUUUUUDDDDDUUUUUUUUUUUUDDDDDDDDDDDDRDDDDDDDLDDDDDDDDRDDDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDDRRUUDDLDLLULUUDDRDLDRRRRRRRLLLLLULLDRRRRRRLLLLLDDRRRRRRRDRRRLLLDLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDDLLLURUUULRDRUURULLRRRURDDUUULLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LUURULLLRRRRRDRUUDDLLLLDLURULLRRRUUURRRDDDRDLLLDLUUUURULLLRRRRRURDLDRURDDUULLLLLLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRDLLUUURDDRDLLLRRRRDDLUULURRRDUURDDRDLLLLRRRURDDDRDLUUULLLLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "ULLDDDUUURRRRDLDRRRLLLLLLDDLULDRDLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDDDRDLLULDLDRLUUURRRRRDDDLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDLURUULULDDDDURDRUUDLULURRLRRURDLDDRRULLDLUUUUDDDDDDLURRRRDLLURURRDDDDDDDUUUUUUULLDDRLUURRDDDDDDDUUUUULRUULLDDRRULULDRDLULDDRLLDL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDDLLDLUUUUUUDDDDRRDDDRRLRRURDDDDDDRDLLULLDRRRRRURDDLLLUUUUUUDDDDRRDDDRRLRRURDDDDDDDDDDDRDLLULLDRRRRRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LUUULDURRRDLLLLLLLDRUDLLUUUUUDDULULLLLLULDDDDRDLDLUUUUUDRRDLLLLLLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DRRRRULLUUURLDLUULULRRRLLLDLUURRURDDRR",
+      "source": "existing regression route"
+    }
+  ],
+  "cycle": [
+    {
+      "route": "RRRUUURRRRRRDDLLLLUUDDRRRRUURRRDDRRRRUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDDDRRRLRRRRLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDLRUUUUUUUUUDDDDDLLUULUUURRRUULLLULLLLLLLLLLLLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRRUUDLLLLLLLLLLLRRRRRUUDDLLLLLLLLRRRRRRUULL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLLDLUUUUULURUULUURLDDRDDDRRULDLUULURRRRRLLLLUDRRRRURR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRRRRRRRRDDRRRRRRRRRDDRRRRRRRRRDDRRRRRRRRRDDRRRRRRRRRDLUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LUUURULLDLUURULLDLUUUUUURULLLLDDRRRRDDDDDDDDDRRRRRRRRUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "URUUURUULDLULLDRRURDDDRDDLRRDDDRRUULDRDLRRDDDUULLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RDDDLUDLLLURRDRUUUDLLLURRDRUUURUULLLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRLURLURURDDDDLLLLUUURRRURDDLDDRDDR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRRRRRRRRLLLUUUUURRRRLLUUUDDDRRRRLLUUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDRRRDDLURDDLURDDLURR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDDDDDDURRRRUUUUUUUUUUDDLLRDDDDDDLLLUUUUUUUUUDDDRRLLU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDDRRRURRRDDDLLLUUURULLULDDDURRDLLLLULLDRRRRURRDDDDDURDDDDDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDLLRLLLLLLDDUULLRLLLLLLDDDUUULLLRRLLLLLLDDDDUUUUUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LUURURDDDLLDLLURRRLLLUURRURDDDRRRRDDULDDRRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DRRDDLUUUUUUURDDDDLLLULURRLDDRURUUDLDLUURULLLLLDRRRRULLLR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "URRRRDLLLLDLURRRRRDRULLLLDLURRRRDLLURRRUULUDDL",
+      "source": "existing regression route"
+    }
+  ],
+  "player": [
+    {
+      "route": "LLLDDDRRDRURRDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDRDLUULLLDDUURRDDUUUL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RUUUULLLLLDRDRDDLDDLLUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RUULLLRDDLRRRDDLLLUURRRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLDDDRRRRLLULLDRRRRLLULLDRRRRLLULLDRRRRLLLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UURRUDLLLLUDRRULDDDRUUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDDUUUUDRRRUDDDDLUUURDDDLUUURDDDUURRDUUURR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DRRLDRLDRUULLLLDRRRULDLURULRDDDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DLLRUULLLLDLUUURRRRRRLLLUL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "URRLDDDRULLLLULLDRRRULDDDURRRULLLLLLDRRRRRDR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UULLDRRRRDDDLLLLUURLUURRRRDDLDLULURRLLLDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDDRRLLULDRUULLURRRDLLLRRRRRURRDULLDLLURDLUURDLLURDDLLLURRRDLLLURRRDLLLURRRDLLLURRRDLLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRUUUUDDLLLLLLLLUUUUUURRRRRDDDDDDDRRLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UURULLULLLLDDDDDDRRRRDLLLLLRDDLLUUUUDRRRRRRUUDDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDDDURRRDDLDRRUULLLLDLD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRRRUUULLLRDRRRRRUUULLLURDDDDLUUURRRRDRRUUUULLLRRRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DRRRRLLLRRRRLDLUULURDDDDLLLLDLLURDRUULURDDDLLLDLLULDDDDUUURRRDRUUUURURRDDRRLLLLLDLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LUULDDDDRULURRDDRUUUUDDRRRDLLURRDDLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDRDLLULDRRRURDRDLLLLDLUUULURRRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLLDDRRUUURRRUUUUURULDLUUULURURRRRULLDLDDLDRRURDDLLLULDRDDR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UULLLDDRULDDRULDDRULDRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "URRUULLDRRUURUURDDLDRUUUR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLLLUUURRRRUULLLUURUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRRURRDDRDLLLULRLDRUUUULLUURRDRLLU",
+      "source": "existing regression route"
+    }
+  ],
+  "possess": [
+    {
+      "route": "DDLLLRRURRDLDLUUUUDRDDLUUUULL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRUUDDDDLURLULDDDDUURUULDDDDDRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDDLDDUDRRUULLDDRLUURRDDUUUULURRRRLLDDDUULURRRRLR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLLLRRURDUUUDLDDRUULLURRUUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLLDRRULLLLULDRRRRDLUURDLRRRRULLDRRRDRRULLLLULDDRRUULDRULDDLLD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DLLULDDRDRUUULLURRDRUUUUURRURRDDDL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDRDLLUUUULDDDDRULLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DRRUUURULDLULLDDDLLLDRRRRLLLUUUURRRDLULUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LURRRRRDLLLDRRRDLLLLUUULURDRURULDRURULU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DRRUULLLURRRRUULDLDRRRRLLDDDRDR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RRUULLDLUDLURULLLDRULLDLUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RUUURRURDDDDRDLRDDDRDLDLULLLDRRUUUUULLLRRRRRRRRLLDDDDDDLUURDDLUULUUR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "URRLLDDDDRUUUURRLLLDDDURRDDRULLDLLRRULLRULDRULDDRUUURURRRLLLDLURRRRRD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDDRRRULLULDDRDLLUURRRRRRURRDLLDDDLDDLLURDDLDDRUUUUURRRDLLULDRDLLUUURRRDRRRURRDLDDDLLLDDRUULDDDRDDLUUUULDRRRRLUURDUULLLDDLDRRRRLLDLLLLDDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDDRRRDRULURDDRUULURRUULDDRULURRRUUURR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UULLLLLDLLDDDLLLUUULUDDRRRDRUUUUUULLRULLDDDDDDRRRDULLLLUUUUUUULLLLDDDLLUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DLLDRURRRDDLLLDRRRURRRDLLLDRRRURRRDLLLDRURRRDDDLLLDRRRRURUULLLDDDLDDDRDDDDLLLLRRDDRRRRUUUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LUUUDDRLDDDRLDDDRLDDDURLDDDRLDDDUURLLULDULDU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UURLLRRRDLLLRRRDLLLRRRDLDLUDLURRULLDDLUUUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DRURDLDRRLUURRDURRDLULDRDLLULDDULLDDRUUDDDRUUUULRRRULLLDDLURDDDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RUUURRDDRUURDRDRUUURRDDDDDDDDDDRRDDDDDDDDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "RUUULDDLDRRRRLLLUULLLRRUULRDDDDRUULUULUULRDDRDDLLRRRRUUURRRUR",
+      "source": "existing regression route"
+    }
+  ],
+  "wall": [
+    {
+      "route": "DDRRRLLLDRULDRURRRUU",
+      "source": "existing regression route"
+    },
+    {
+      "route": "ULLLLUURRRUULLDRRULLLDDDDRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LLLLUURRULDRRUULLLLDRRLDDDRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDDDRRRRLULDLLUURURDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDDDDDRUULLDRRURDDLLLUURRRDLUURDDDLLLURRRRRUUUULULDDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "LDRRULDRURDLLLDRRDRURRRLLLULDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UUURRDDLLLLLURRRURDDLDLLLLRRRRDRULUURRDLLULDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "URRDLLLDDRDRRUULLDRDRUULURDRUUURULLULLDRUUUUULLDRULDRURDDLULLRDDLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DDLLLLURRDLURRDLUUURDDDDDUULURURRRRRDLLURDLLURDDDLUUUUUDRDLUULDDDDDDDRRR",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DLLLULURRRULLULDDLDDDRRRRRRDRUUURLLDLURUURRRRRRRDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UUULLDLDRURDRDDDLLLLLRUUDRDLLUUURRRRDDLDDRULURLLLLDLLLLULDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DRRULDDRUUUURRRULLLDDDDDLURULDLURULDLURULDLURUUURRRDDDDRRRDD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DLLLUUDRRRRRRRLDLDDRUULLURRRRULDDDDUUUURRDDDDRDLLL",
+      "source": "existing regression route"
+    },
+    {
+      "route": "DLURDRUULURRRDLURDLDDDRUUUURULLRRURDDDDUUUULULLLD",
+      "source": "existing regression route"
+    },
+    {
+      "route": "UURRRRDLURDLDDDLLLURDUURRULLLURDLDRDRUUU",
+      "source": "existing regression route"
+    }
+  ]
+}

@@ -1,0 +1,1000 @@
+{
+  "testedDate": "2026-11-20",
+  "gameplaySourceCommit": "d986b0cb327e2e42ef0a25dcc20635c2839d7fb9",
+  "desktop": [
+    {
+      "width": 1100,
+      "chapter": "intro",
+      "passed": 9,
+      "steps": 237
+    },
+    {
+      "width": 1100,
+      "chapter": "enter",
+      "passed": 18,
+      "steps": 752
+    },
+    {
+      "width": 1100,
+      "chapter": "empty",
+      "passed": 14,
+      "steps": 565
+    },
+    {
+      "width": 1100,
+      "chapter": "eat",
+      "passed": 13,
+      "steps": 609
+    },
+    {
+      "width": 1100,
+      "chapter": "reference",
+      "passed": 12,
+      "steps": 761
+    },
+    {
+      "width": 1100,
+      "chapter": "swap",
+      "passed": 5,
+      "steps": 515
+    },
+    {
+      "width": 1100,
+      "chapter": "center",
+      "passed": 16,
+      "steps": 668
+    },
+    {
+      "width": 1100,
+      "chapter": "clone",
+      "passed": 25,
+      "steps": 1438
+    },
+    {
+      "width": 1100,
+      "chapter": "transfer",
+      "passed": 29,
+      "steps": 1636
+    },
+    {
+      "width": 1100,
+      "chapter": "open",
+      "passed": 12,
+      "steps": 560
+    },
+    {
+      "width": 1100,
+      "chapter": "flip",
+      "passed": 17,
+      "steps": 1017
+    },
+    {
+      "width": 1100,
+      "chapter": "cycle",
+      "passed": 18,
+      "steps": 809
+    },
+    {
+      "width": 1100,
+      "chapter": "player",
+      "passed": 24,
+      "steps": 900
+    },
+    {
+      "width": 1100,
+      "chapter": "possess",
+      "passed": 22,
+      "steps": 1121
+    },
+    {
+      "width": 1100,
+      "chapter": "wall",
+      "passed": 15,
+      "steps": 670
+    }
+  ],
+  "mobile": [
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "chapter": "intro",
+      "passed": 9,
+      "steps": 237
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "chapter": "enter",
+      "passed": 18,
+      "steps": 752
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "chapter": "empty",
+      "passed": 14,
+      "steps": 565
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "chapter": "eat",
+      "passed": 13,
+      "steps": 609
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "chapter": "reference",
+      "passed": 12,
+      "steps": 761
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "chapter": "swap",
+      "passed": 5,
+      "steps": 515
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "chapter": "center",
+      "passed": 16,
+      "steps": 668
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "chapter": "clone",
+      "passed": 25,
+      "steps": 1438
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "chapter": "transfer",
+      "passed": 29,
+      "steps": 1636
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "chapter": "open",
+      "passed": 12,
+      "steps": 560
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "chapter": "flip",
+      "passed": 17,
+      "steps": 1017
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "chapter": "cycle",
+      "passed": 18,
+      "steps": 809
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "chapter": "player",
+      "passed": 24,
+      "steps": 900
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "chapter": "possess",
+      "passed": 22,
+      "steps": 1121
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390,
+      "chapter": "wall",
+      "passed": 15,
+      "steps": 670
+    }
+  ],
+  "classic": [
+    {
+      "name": "单箱入门",
+      "steps": 3,
+      "won": true,
+      "undo": true,
+      "demonstration": true
+    },
+    {
+      "name": "双箱练习",
+      "steps": 10,
+      "won": true,
+      "undo": true,
+      "demonstration": true
+    },
+    {
+      "name": "三箱挑战",
+      "steps": 22,
+      "won": true,
+      "undo": true,
+      "demonstration": true
+    },
+    {
+      "name": "连推练习",
+      "steps": 2,
+      "won": true,
+      "undo": true,
+      "demonstration": true
+    }
+  ],
+  "conversions": [
+    {
+      "chapter": "intro",
+      "n": 1,
+      "won": true
+    },
+    {
+      "chapter": "intro",
+      "n": 2,
+      "won": true
+    },
+    {
+      "chapter": "intro",
+      "n": 3,
+      "won": true
+    },
+    {
+      "chapter": "intro",
+      "n": 4,
+      "won": true
+    },
+    {
+      "chapter": "intro",
+      "n": 5,
+      "won": true
+    },
+    {
+      "chapter": "intro",
+      "n": 6,
+      "won": true
+    },
+    {
+      "chapter": "intro",
+      "n": 7,
+      "won": true
+    },
+    {
+      "chapter": "intro",
+      "n": 8,
+      "won": true
+    },
+    {
+      "chapter": "intro",
+      "n": 9,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 1,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 2,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 3,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 4,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 5,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 6,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 7,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 8,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 9,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 10,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 11,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 12,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 13,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 14,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 15,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 16,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 17,
+      "won": true
+    },
+    {
+      "chapter": "enter",
+      "n": 18,
+      "won": true
+    },
+    {
+      "chapter": "empty",
+      "n": 1,
+      "won": true
+    },
+    {
+      "chapter": "empty",
+      "n": 2,
+      "won": true
+    },
+    {
+      "chapter": "empty",
+      "n": 3,
+      "won": true
+    },
+    {
+      "chapter": "empty",
+      "n": 4,
+      "won": true
+    },
+    {
+      "chapter": "empty",
+      "n": 5,
+      "won": true
+    },
+    {
+      "chapter": "empty",
+      "n": 6,
+      "won": true
+    },
+    {
+      "chapter": "empty",
+      "n": 7,
+      "won": true
+    },
+    {
+      "chapter": "empty",
+      "n": 8,
+      "won": true
+    },
+    {
+      "chapter": "empty",
+      "n": 9,
+      "won": true
+    },
+    {
+      "chapter": "empty",
+      "n": 10,
+      "won": true
+    },
+    {
+      "chapter": "empty",
+      "n": 11,
+      "won": true
+    },
+    {
+      "chapter": "empty",
+      "n": 12,
+      "won": true
+    },
+    {
+      "chapter": "empty",
+      "n": 13,
+      "won": true
+    },
+    {
+      "chapter": "empty",
+      "n": 14,
+      "won": true
+    },
+    {
+      "chapter": "eat",
+      "n": 1,
+      "won": true
+    },
+    {
+      "chapter": "eat",
+      "n": 2,
+      "won": true
+    },
+    {
+      "chapter": "eat",
+      "n": 3,
+      "won": true
+    },
+    {
+      "chapter": "eat",
+      "n": 4,
+      "won": true
+    },
+    {
+      "chapter": "eat",
+      "n": 5,
+      "won": true
+    },
+    {
+      "chapter": "eat",
+      "n": 6,
+      "won": true
+    },
+    {
+      "chapter": "eat",
+      "n": 7,
+      "won": true
+    },
+    {
+      "chapter": "eat",
+      "n": 8,
+      "won": true
+    },
+    {
+      "chapter": "eat",
+      "n": 9,
+      "won": true
+    },
+    {
+      "chapter": "eat",
+      "n": 10,
+      "won": true
+    },
+    {
+      "chapter": "eat",
+      "n": 11,
+      "won": true
+    },
+    {
+      "chapter": "eat",
+      "n": 12,
+      "won": true
+    },
+    {
+      "chapter": "eat",
+      "n": 13,
+      "won": true
+    },
+    {
+      "chapter": "reference",
+      "n": 1,
+      "won": true
+    },
+    {
+      "chapter": "reference",
+      "n": 2,
+      "won": true
+    },
+    {
+      "chapter": "reference",
+      "n": 3,
+      "won": true
+    },
+    {
+      "chapter": "reference",
+      "n": 4,
+      "won": true
+    },
+    {
+      "chapter": "reference",
+      "n": 5,
+      "won": true
+    },
+    {
+      "chapter": "reference",
+      "n": 6,
+      "won": true
+    },
+    {
+      "chapter": "reference",
+      "n": 7,
+      "won": true
+    },
+    {
+      "chapter": "reference",
+      "n": 8,
+      "won": true
+    },
+    {
+      "chapter": "reference",
+      "n": 9,
+      "won": true
+    },
+    {
+      "chapter": "reference",
+      "n": 10,
+      "won": true
+    },
+    {
+      "chapter": "reference",
+      "n": 11,
+      "won": true
+    },
+    {
+      "chapter": "reference",
+      "n": 12,
+      "won": true
+    },
+    {
+      "chapter": "swap",
+      "n": 1,
+      "won": true
+    },
+    {
+      "chapter": "swap",
+      "n": 2,
+      "won": true
+    },
+    {
+      "chapter": "swap",
+      "n": 3,
+      "won": true
+    },
+    {
+      "chapter": "swap",
+      "n": 4,
+      "won": true
+    },
+    {
+      "chapter": "swap",
+      "n": 5,
+      "won": true
+    },
+    {
+      "chapter": "center",
+      "n": 1,
+      "won": true
+    },
+    {
+      "chapter": "center",
+      "n": 2,
+      "won": true
+    },
+    {
+      "chapter": "center",
+      "n": 3,
+      "won": true
+    },
+    {
+      "chapter": "center",
+      "n": 4,
+      "won": true
+    },
+    {
+      "chapter": "center",
+      "n": 5,
+      "won": true
+    },
+    {
+      "chapter": "center",
+      "n": 6,
+      "won": true
+    },
+    {
+      "chapter": "center",
+      "n": 7,
+      "won": true
+    },
+    {
+      "chapter": "center",
+      "n": 8,
+      "won": true
+    },
+    {
+      "chapter": "center",
+      "n": 9,
+      "won": true
+    },
+    {
+      "chapter": "center",
+      "n": 10,
+      "won": true
+    },
+    {
+      "chapter": "center",
+      "n": 11,
+      "won": true
+    },
+    {
+      "chapter": "center",
+      "n": 12,
+      "won": true
+    },
+    {
+      "chapter": "center",
+      "n": 13,
+      "won": true
+    },
+    {
+      "chapter": "center",
+      "n": 14,
+      "won": true
+    },
+    {
+      "chapter": "center",
+      "n": 15,
+      "won": true
+    },
+    {
+      "chapter": "center",
+      "n": 16,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 1,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 2,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 3,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 4,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 5,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 6,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 7,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 8,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 9,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 10,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 11,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 12,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 13,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 14,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 15,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 16,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 17,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 18,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 19,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 20,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 21,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 22,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 23,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 24,
+      "won": true
+    },
+    {
+      "chapter": "clone",
+      "n": 25,
+      "won": true
+    },
+    {
+      "chapter": "flip",
+      "n": 1,
+      "won": true
+    },
+    {
+      "chapter": "flip",
+      "n": 2,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 1,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 2,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 3,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 4,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 5,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 6,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 7,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 8,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 9,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 10,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 11,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 12,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 14,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 15,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 16,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 17,
+      "won": true
+    },
+    {
+      "chapter": "cycle",
+      "n": 18,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 1,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 2,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 3,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 4,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 5,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 6,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 7,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 8,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 9,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 10,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 11,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 12,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 13,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 14,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 15,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 18,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 19,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 20,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 21,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 22,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 23,
+      "won": true
+    },
+    {
+      "chapter": "player",
+      "n": 24,
+      "won": true
+    }
+  ]
+}
