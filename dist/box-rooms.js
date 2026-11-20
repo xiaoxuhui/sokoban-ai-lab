@@ -15,6 +15,7 @@
     const inside = [-1];
     const clones = [false];
     const flipped = [false];
+    const walls = [false];
     const positions = [null];
     const glyphPlayers = [];
     const goals = [];
@@ -35,8 +36,8 @@
         if (symbol === 'p' || symbol === 'P') finish = position;
         if (symbol === '@' || symbol === 'P') {
           if (!positions[0]) { positions[0] = position; glyphPlayers.push(0); }
-          else { glyphPlayers.push(positions.length); inside.push(-1); clones.push(false); flipped.push(false); positions.push(position); }
-        } else if (symbol === '$' || symbol === '*' || child >= 0) {
+          else { glyphPlayers.push(positions.length); inside.push(-1); clones.push(false); flipped.push(false); walls.push(false); positions.push(position); }
+        } else if (symbol === '$' || symbol === '*' || symbol === '%' || child >= 0) {
           if (child >= 0 && symbol !== name) goals.push(position);
           if (child >= 0 && !isClone) {
             if (rooms[child].owner !== -1) throw Error('每间箱内房间只能有一个外壳。');
@@ -45,6 +46,7 @@
           inside.push(child);
           clones.push(isClone);
           flipped.push(Boolean(level.flipped?.includes(isClone ? name : target)));
+          walls.push(symbol === '%');
           positions.push(position);
         } else if (symbol !== ' ' && symbol !== '#' && symbol !== '.' && symbol !== 'p') {
           throw Error('未知的关卡方块 ' + symbol);
@@ -55,48 +57,55 @@
     if (level.players && players.some(id => id < 0)) throw Error('玩家必须位于可移动的方块上。');
     if (positions[0] && players[0] > 0) {
       const primary = players[0];
-      for (const values of [positions, inside, clones, flipped]) [values[0], values[primary]] = [values[primary], values[0]];
+      for (const values of [positions, inside, clones, flipped, walls]) [values[0], values[primary]] = [values[primary], values[0]];
       const remap = id => id === primary ? 0 : id === 0 ? primary : id;
       players = players.map(remap);
       rooms.forEach(room => { room.owner = remap(room.owner); });
     } else if (!positions[0] && players[0] > 0) {
       const primary = players[0];
-      for (const values of [positions, inside, clones, flipped]) { values[0] = values[primary]; values.splice(primary, 1); }
+      for (const values of [positions, inside, clones, flipped, walls]) { values[0] = values[primary]; values.splice(primary, 1); }
       const remap = id => id === primary ? 0 : id > primary ? id - 1 : id;
       players = players.map(remap);
       rooms.forEach(room => { room.owner = remap(room.owner); });
     }
     if (!positions[0] || !finish || rooms.slice(1).some(room => room.owner < 0)) throw Error('请检查房间和玩家终点。');
+    if (level.boxGoals) { goals.length = 0; goals.push(...level.boxGoals.map(([name,x,y]) => [roomIds.get(name),x,y])); }
+    const possessable = positions.map(position => (level.possessables ?? []).some(([name,x,y]) => matches(position, roomIds.get(name),x,y)));
     return {
       rooms, inside, clones, flipped, goals, finish, eat: Boolean(level.eat), allowCycles: Boolean(level.allowCycles), transfer: Boolean(level.transfer),
       portalConversion: level.portalConversion !== false,
       compressedRooms: Boolean(level.compressedRooms),
       players, finishes: finishes ?? [finish], playerMode: level.playerMode ?? 'sync',
+      walls, possessable, possessionEnabled: Boolean(level.possessionEnabled),
       conversionReason: level.conversionReason ?? '当前关卡的规则暂不支持转成传送门地图。',
-      initial: { positions, flipped: flipped.slice(), moves: 0, pushes: 0 },
+      initial: { positions, flipped: flipped.slice(), moves: 0, pushes: 0, ...(level.possessionEnabled ? { players: players.slice(), activePlayer: players[0] } : {}) },
     };
   }
 
   const matches = (position, room, x, y) => position[0] === room && position[1] === x && position[2] === y;
 
   function placed(map, state) {
-    return map.goals.filter(([room, x, y]) => state.positions.some((position, id) => !map.players.includes(id) && matches(position, room, x, y))).length;
+    const players = state.players ?? map.players;
+    return map.goals.filter(([room, x, y]) => state.positions.some((position, id) => !map.walls[id] && !players.includes(id) && matches(position, room, x, y))).length;
   }
 
   function won(map, state, covered = placed(map, state)) {
-    return map.finishes.every(goal => map.players.some(id => matches(state.positions[id], ...goal))) && covered === map.goals.length;
+    return map.finishes.every(goal => (state.players ?? map.players).some(id => !map.walls[id] && matches(state.positions[id], ...goal))) && covered === map.goals.length;
   }
 
   function step(map, state, direction) {
+    const roster = state.players ?? map.players;
     if (typeof direction === 'string' && /^P[1-9]\d*$/.test(direction)) {
-      const player = map.players[Number(direction.slice(1)) - 1];
-      return player === undefined || player === (state.activePlayer ?? map.players[0]) ? state : { ...state, activePlayer: player, crossings: [], transfers: [] };
+      const player = roster[Number(direction.slice(1)) - 1];
+      return player === undefined || player === (state.activePlayer ?? roster[0]) ? state : { ...state, activePlayer: player, crossings: [], transfers: [] };
     }
-    const players = (state.playerMode ?? map.playerMode) === 'single' ? [state.activePlayer ?? map.players[0]] : map.players;
+    const indices = (state.playerMode ?? map.playerMode) === 'single' ? [roster.indexOf(state.activePlayer ?? roster[0])] : roster.map((_, index) => index);
     let next = state;
     const crossings = [], transfers = [];
-    for (const player of players) {
-      const moved = movePlayer(map, next, direction, player, state.activePlayer ?? map.players[0]);
+    for (const index of indices) {
+      const players = next.players ?? map.players;
+      const player = players[index];
+      const moved = movePlayer(map, next, direction, player, next.activePlayer ?? players[0]);
       if (moved !== next) { crossings.push(...moved.crossings); transfers.push(...moved.transfers); next = moved; }
     }
     return next === state ? state : { ...next, moves: state.moves + 1, pushes: state.pushes + Number(next.pushes > state.pushes), crossings, transfers };
@@ -110,6 +119,7 @@
     let cycleMembers = null;
     const crossings = [];
     const transfers = [];
+    let possessed = null;
 
     function checkpoint() {
       return { positions: positions.slice(), flipped: flipped.slice(), crossings: crossings.length, transfers: transfers.length, cycleMembers };
@@ -210,20 +220,31 @@
         positions[entity] = [roomId, x, y];
         return true;
       }
-      if (occupant >= 0 && !moveEntity(occupant, 0.5, heading)) {
+      if (occupant >= 0 && (map.walls[occupant] || !moveEntity(occupant, 0.5, heading))) {
         if (enter(entity, occupant, offset, heading, entered)) return true;
-        if (!map.eat || map.inside[entity] < 0 || moving.has(occupant)) return false;
-        moving.set(occupant, heading ^ 2);
-        // A swallowed piece moves inward through the moving box's leading face.
-        const swallowed = enter(occupant, entity, 0.5, heading ^ 2, entered);
-        moving.delete(occupant);
-        if (!swallowed) return false;
+        if (map.eat && map.inside[entity] >= 0 && !map.walls[occupant] && !moving.has(occupant)) {
+          moving.set(occupant, heading ^ 2);
+          // A swallowed piece moves inward through the moving box's leading face.
+          const swallowed = enter(occupant, entity, 0.5, heading ^ 2, entered);
+          moving.delete(occupant);
+          if (swallowed) { positions[entity] = [roomId, x, y]; return true; }
+        }
+        if (map.possessionEnabled && entity === player && map.possessable[occupant] && !(state.players ?? map.players).includes(occupant)) {
+          possessed = occupant;
+          return true;
+        }
+        return false;
       }
       positions[entity] = [roomId, x, y];
       return true;
     }
 
     if (!moveEntity(player, 0.5, direction)) return state;
+    if (possessed !== null) {
+      const players = (state.players ?? map.players).map(id => id === player ? possessed : id);
+      return { ...state, players, activePlayer: focus === player ? possessed : focus, moves: state.moves + 1,
+        crossings: [], transfers: [], possession: { from: player, to: possessed } };
+    }
     // Only the closed part of the chain rotates. A pusher outside that loop
     // keeps its cell; otherwise it would overlap the box returning behind it.
     if (cycleMembers) {
@@ -235,7 +256,7 @@
       for (let i = transfers.length - 1; i >= 0; i--) if (!cycleMembers.has(transfers[i].entity)) transfers.splice(i, 1);
     }
     const pushed = positions.some((position, index) => index !== player && position !== state.positions[index]);
-    return { ...state, positions, flipped, moves: state.moves + 1, pushes: state.pushes + Number(pushed), crossings, transfers };
+    return { ...state, positions, flipped, moves: state.moves + 1, pushes: state.pushes + Number(pushed), crossings, transfers, ...(map.possessionEnabled ? { possession: null } : {}) };
   }
 
   const api = { compile, placed, step, won };
