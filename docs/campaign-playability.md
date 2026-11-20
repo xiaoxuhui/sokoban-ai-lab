@@ -48,3 +48,21 @@ node scripts/check-campaign-browser.cjs 390 possess
 ```
 
 逐章结果、输入数量和转换结果保存在 `campaign-playability-results.json`；完整路线保存在 `tests/fixtures/box-campaign-routes.json`。
+
+## 后续显示修复
+
+用户随后指出了初轮通关及尺寸检查漏掉的两个显示问题：
+
+- 占据 6、10 的封闭玩家方块被画成空心房间。现在没有出入口、实体和目标的封闭房间显示为实心；棋盘、嵌套预览和跨层动画使用相同规则。碰撞与占据规则保留。
+- 不同关卡会重复使用同一个房间编号，墙底图缓存未在切关时清除。现在重建棋盘时同步清除墙底图缓存，按新房间的墙位置、尺寸和颜色重新绘制。
+
+浏览器检查已增加玩家实心显示断言，并解码实际墙底图，逐格比对当前地图里的静态墙、移动墙及颜色，覆盖切关、查看箱内和返回玩家。只复查显示而不重复整条通关路线时可使用：
+
+修复后已完成 249 关切换及箱内查看的墙位置检查，以及占据 22 关的完整网页通关复测；第 6 关另检查了最终墙颜色与实心玩家显示。原有 662 项自动检查仍全部通过。
+
+```powershell
+$env:QA_LAYOUT_ONLY='1'
+node scripts/check-campaign-browser.cjs 1100
+# 只测第六关：
+node scripts/check-campaign-browser.cjs 390 possess 6
+```

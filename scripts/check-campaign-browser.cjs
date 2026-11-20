@@ -32,14 +32,39 @@ async function runBrowser(file,width,chapter){
  }finally{clearTimeout(timer);browser.kill();}
 }
 (async()=>{
-const all=[];const width=Number(process.argv[2]||1100),only=process.argv[3];
+const all=[];const width=Number(process.argv[2]||1100),only=process.argv[3],onlyLevel=Number(process.argv[4]),layoutOnly=process.env.QA_LAYOUT_ONLY==='1';
 for(const chapter of [...new Set(routes.map(r=>r.chapter))].filter(ch=>!only||ch===only)){
- const selected=routes.filter(r=>r.chapter===chapter);
+ const selected=routes.filter(r=>r.chapter===chapter&&(!onlyLevel||r.n===onlyLevel));
+ if(!selected.length)throw Error('No matching level');
  const qa=`setTimeout(async()=>{
  const entries=${JSON.stringify(selected)},results=[],wait=ms=>new Promise(r=>setTimeout(r,ms));
  for(const entry of entries){const result={chapter:entry.chapter,n:entry.n,steps:0,issues:[]};try{
   openLevel(entry.index);await wait(25);
-  if(levelButtons.length!==entries.length)throw Error('Level buttons missing');
+  if(levelButtons.length!==${routes.filter(r=>r.chapter===chapter).length})throw Error('Level buttons missing');
+  const checkTerrain=async()=>{
+   const roomId=inspectedRoom??state.positions[state.activePlayer??playerIds()[0]][0],room=map.rooms[roomId];
+   const source=board.style.backgroundImage.slice(5,-2);if(!source)throw Error('Wall terrain missing');
+   const image=new Image();image.src=source;await image.decode();
+   if(image.naturalWidth!==room.width||image.naturalHeight!==room.height)throw Error('Previous level wall dimensions retained');
+   const canvas=document.createElement('canvas');canvas.width=room.width;canvas.height=room.height;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);const pixels=ctx.getImageData(0,0,room.width,room.height).data;
+   ctx.fillStyle=roomColor(roomId);ctx.fillRect(0,0,1,1);const color=ctx.getImageData(0,0,1,1).data;
+   for(let cell=0;cell<room.tiles.length;cell++){
+    const x=cell%room.width,y=Math.floor(cell/room.width),column=viewFlipped()?room.width-1-x:x;
+    const expected=room.tiles[cell]==='#'||state.positions.some(([r,px,py],entity)=>r===roomId&&px===x&&py===y&&map.walls[entity]&&!hiddenBoxes.has(entity));
+    if((pixels[(y*room.width+column)*4+3]>0)!==expected)throw Error('Wall picture disagrees with current map at '+roomId+','+x+','+y);
+    if(expected&&[0,1,2].some(channel=>pixels[(y*room.width+column)*4+channel]!==color[channel]))throw Error('Wall color retained from another room');
+   }
+  };
+  await checkTerrain();
+  const checkSolidPlayer=()=>{
+   if(entry.chapter!=='possess'||![6,10].includes(entry.n))return;
+   const [r,x,y]=state.positions[0],visible=inspectedRoom??state.positions[state.activePlayer??playerIds()[0]][0];
+   if(r!==visible)return;
+   const cell=board.children[y*map.rooms[r].width+x];
+   if(cell.querySelector('button.room-box,canvas'))throw Error('Sealed player exposes a hollow room');
+   if(!cell.querySelector(playerIds().includes(0)?'.player':'.crate.possessable-piece'))throw Error('Solid body or control marker missing');
+  };
+  checkSolidPlayer();
   const checkLayout=()=>{
    if(document.documentElement.scrollWidth>innerWidth+1)throw Error('Page exceeds viewport');
    if(textView)return;
@@ -53,9 +78,10 @@ for(const chapter of [...new Set(routes.map(r=>r.chapter))].filter(ch=>!only||ch
   for(const shell of roomButtons.map(b=>Number(b.dataset.shell))){
    const button=board.querySelector('button[data-shell="'+shell+'"]');if(!button)throw Error('Room preview missing');
    const child=map.inside[shell],playerRoom=state.positions[state.activePlayer??playerIds()[0]][0];
-   button.click();if(inspectedRoom===null&&child!==playerRoom)throw Error('Room click did not inspect');await wait(15);clearRoomMotion();clearBoxMotion();render();checkLayout();
-   $('intro-return').click();if(inspectedRoom!==null)throw Error('Return to player failed');clearRoomMotion();render();
+   button.click();if(inspectedRoom===null&&child!==playerRoom)throw Error('Room click did not inspect');await wait(15);clearRoomMotion();clearBoxMotion();render();checkLayout();await checkTerrain();
+   $('intro-return').click();if(inspectedRoom!==null)throw Error('Return to player failed');clearRoomMotion();render();await checkTerrain();
   }
+  if(${layoutOnly}){result.displayChecked=true;results.push(result);continue;}
   if(!entry.solved){result.unsolved=true;results.push(result);continue;}
   let sim=state,visual='';
   for(const d of entry.route){const direction='URDL'.indexOf(d),v=Boolean(playerViews.get(sim))&&direction%2?direction^2:direction;visual+='WDSA'[v];const next=step(map,sim,direction);if(next===sim)throw Error('Reference route blocked');playerViews.set(next,viewAfterCrossings(sim,next));sim=next;}
@@ -66,21 +92,23 @@ for(const chapter of [...new Set(routes.map(r=>r.chapter))].filter(ch=>!only||ch
    const before=state;if(next.disabled)throw Error('Single-step stopped early '+i);next.click();if(state===before)throw Error('Single-step did not execute '+i+' '+$('route-input').querySelector('.route-status').textContent);result.steps++;
    if(!animated&&(state.crossings?.length||state.transfers?.length)){await wait(280);animated=true;}
    clearRoomMotion();clearBoxMotion();
+   checkSolidPlayer();
   }
   if(!won(map,state))throw Error('Route did not win in UI');
   if(JSON.stringify(state.positions)!==JSON.stringify(sim.positions))throw Error('UI and rules diverged');
   const saved=JSON.stringify(state);$('intro-undo').click();if(JSON.stringify(state)===saved)throw Error('Undo failed');$('intro-redo').click();if(JSON.stringify(state)!==saved)throw Error('Redo failed');clearRoomMotion();clearBoxMotion();render();
   try{checkLayout();}catch(e){if(!result.issues.includes(e.message))result.issues.push(e.message);}
+  await checkTerrain();
   if(!$('intro-next').disabled&&entry.index<levels.length-1){$('intro-next').click();if(active!==entry.index+1)throw Error('Next level failed');}
   openLevel(entry.index);$('intro-reset').click();if(state!==map.initial)throw Error('Reset failed');
   result.won=true;result.animation=animated;
- }catch(e){result.error=e.stack;}results.push(result);}
+ }catch(e){result.error=e.stack||e.message||String(e);}results.push(result);}
  document.documentElement.setAttribute('data-qa-result',JSON.stringify({width:${width},viewport:innerWidth,scrollWidth:document.documentElement.scrollWidth,mainWidth:document.querySelector('main').getBoundingClientRect().width,results}));
 },100);`;
  const html=template.replace('</body>',()=>script(boot)+files.map(f=>script(read(f))).join('')+script(qa)+'</body>');
  const file=output.replace(/\\/g,'/')+'/all-campaign-'+width+'-'+chapter+'.html';fs.writeFileSync(file,html);
  let result;try{result=await runBrowser(file,width,chapter);}catch(e){result={chapter,error:e.message};}
- all.push(result);if(result.error||result.results?.some(r=>r.error||r.issues.length||r.unsolved))process.exitCode=1;fs.writeFileSync(output.replace(/\\/g,'/')+'/all-campaign-ui-results-'+width+(only?'-'+only:'')+'.json',JSON.stringify(all,null,2));
- console.log(JSON.stringify({chapter,width,viewport:result.viewport,scrollWidth:result.scrollWidth,won:result.results?.filter(r=>r.won).length,count:result.results?.length,issues:result.results?.filter(r=>r.error||r.issues.length||r.unsolved),error:result.error}));
+ all.push(result);if(result.error||result.results?.some(r=>r.error||r.issues.length||r.unsolved||(!r.won&&!r.displayChecked)))process.exitCode=1;fs.writeFileSync(output.replace(/\\/g,'/')+'/all-campaign-ui-results-'+width+(only?'-'+only:'')+'.json',JSON.stringify(all,null,2));
+ console.log(JSON.stringify({chapter,width,viewport:result.viewport,scrollWidth:result.scrollWidth,won:result.results?.filter(r=>r.won).length,displayChecked:result.results?.filter(r=>r.displayChecked).length,count:result.results?.length,issues:result.results?.filter(r=>r.error||r.issues.length||r.unsolved),error:result.error}));
 }
 })().catch(e=>{console.error(e);process.exitCode=1;});

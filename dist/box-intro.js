@@ -51,6 +51,7 @@ const parentButton = $('intro-view-parent');
 const moveButtons = document.querySelectorAll('[data-move]');
 const roomMaps = new WeakMap();
 const playerViews = new WeakMap();
+const solidRoomViews = new WeakMap();
 let previewContents;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const zoomCanvas = $('intro-recursive-view');
@@ -159,6 +160,25 @@ function roomLabel(roomId) {
 }
 
 function playerIds(snapshot = state) { return snapshot.players ?? map.players; }
+
+function roomHasPreview(roomId) {
+  if (roomId < 0) return false;
+  if (!solidRoomViews.has(map)) {
+    // An empty room sealed on every edge represents a solid body. Its hollow
+    // implementation must not become a visible interior when it is a player.
+    const solid = new Set();
+    for (const [id, room] of map.rooms.entries()) {
+      const closed = [...room.tiles].every((tile, cell) => {
+        const x = cell % room.width, y = Math.floor(cell / room.width);
+        return tile === '#' || (tile === ' ' && x > 0 && y > 0 && x < room.width - 1 && y < room.height - 1);
+      });
+      const contents = [...map.initial.positions, ...map.goals, ...map.finishes].some(position => position[0] === id);
+      if (closed && !contents) solid.add(id);
+    }
+    solidRoomViews.set(map, solid);
+  }
+  return !solidRoomViews.get(map).has(roomId);
+}
 
 function viewFlipped() {
   return inspectedRoom === null ? Boolean(playerViews.get(state)) : inspectedFlipped;
@@ -428,7 +448,7 @@ function drawRoomMap(canvas, roomId, size = 10, showFinish = true, nested = true
       context.fillStyle = playerIds().includes(entity) ? playerColor : child >= 0 ? roomColor(child) : map.possessionEnabled && map.possessable[entity] ? '#bd6c9f' : crateColor;
       context.fillRect(px + inset, py + inset, side, side);
       // Repeat shared and self-referencing rooms only while their contents are visible.
-      if (nested && child >= 0 && side >= 3 && depth < 12) {
+      if (nested && roomHasPreview(child) && side >= 3 && depth < 12) {
         const inner = map.rooms[child];
         const scale = side / Math.max(inner.width, inner.height);
         if (map.compressedRooms) {
@@ -712,7 +732,7 @@ function boxSprite(entity, mirrored = viewFlipped()) {
   if (map.clones[entity]) context.setLineDash([18, 12]);
   context.strokeRect(edge, edge, side, side);
   context.setLineDash([]);
-  if (child >= 0) {
+  if (roomHasPreview(child)) {
     const preview = document.createElement('canvas');
     const room = map.rooms[child];
     drawRoomMap(preview, child, Math.ceil(side / Math.max(room.width, room.height)), true, true, null, mirrored !== Boolean((state.flipped ?? map.flipped)[entity]));
@@ -1023,6 +1043,8 @@ function renderRoom(container, roomId) {
   const room = map.rooms[roomId];
   const mirrored = viewFlipped();
   if (container.dataset.room !== String(roomId) || container.dataset.flipped !== String(mirrored) || !container.children.length) {
+    // A new level may reuse the same room ID with different walls and colors.
+    delete container.dataset.terrain;
     container.dataset.room = roomId;
     container.dataset.flipped = mirrored;
     container.style.direction = mirrored ? 'rtl' : 'ltr';
@@ -1055,6 +1077,7 @@ function renderRoom(container, roomId) {
     if (room.tiles[index] === '#') continue;
     const entity = occupied.get(index);
     const child = entity === undefined ? -1 : map.inside[entity];
+    const preview = roomHasPreview(child);
     const isPlayer = playerIds().includes(entity);
     const wall = Boolean(map.walls[entity]);
     const canPossess = Boolean(map.possessionEnabled && map.possessable[entity] && !isPlayer);
@@ -1070,7 +1093,7 @@ function renderRoom(container, roomId) {
       if (finishCells.has(index) && !crate && !wall) addPiece(cell, 'intro-player-goal');
       if (wall) {
         addPiece(cell, 'wall-piece' + (isPlayer ? ' player-wall' : canPossess ? ' possessable-piece' : ''));
-      } else if (child >= 0) {
+      } else if (preview) {
         const button = document.createElement('button');
         button.type = 'button';
         button.dataset.shell = entity;
@@ -1088,7 +1111,7 @@ function renderRoom(container, roomId) {
       } else if (isPlayer) addPiece(cell, 'player');
       else if (crate) addPiece(cell, (goal ? 'crate placed' : 'crate') + (canPossess ? ' possessable-piece' : ''));
     }
-    if (child >= 0) {
+    if (preview) {
       const canvas = cell.querySelector('canvas');
       const button = canvas.parentElement;
       button.title = canPossess ? '可占据：推动、进入和吞入都不可行时，控制权会转移到这个方块' : (state.flipped ?? map.flipped)[entity] ? '镜像箱子：左右出入口相反' :
